@@ -1,0 +1,115 @@
+
+==============================================================================
+STOCKWISE AI - VALIDATION OF THE CLEANED DATA
+==============================================================================
+
+==============================================================================
+A. Cleaned train file: structure
+==============================================================================
+[PASS] train_clean.parquet exists   (train_clean.parquet)
+[PASS] columns are exactly the agreed schema (names and order)   (23 columns)
+[PASS] date column is a real datetime
+[PASS] sales is numeric
+
+==============================================================================
+B. Nothing lost, added or changed compared with the raw train.csv
+==============================================================================
+[PASS] same number of rows as train.csv   (raw=3,000,888 clean=3,000,888)
+[PASS] id is unique
+[PASS] (date, store_nbr, family) is unique
+[PASS] same set of ids as train.csv
+[PASS] column 'date' identical to train.csv row by row
+[PASS] column 'store_nbr' identical to train.csv row by row
+[PASS] column 'family' identical to train.csv row by row
+[PASS] column 'sales' identical to train.csv row by row
+[PASS] column 'onpromotion' identical to train.csv row by row
+
+==============================================================================
+C. Missing / invalid values
+==============================================================================
+[PASS] no missing values in any column   (none)
+[PASS] sales >= 0 and finite
+[PASS] onpromotion >= 0
+
+==============================================================================
+D. Complete calendar grid (needed for lags / rolling averages)
+==============================================================================
+[PASS] every date has one row for EVERY store x family   (1782 series, rows per date min=1782 max=1782)
+[PASS] every series has the same number of days   (1684 days per series)
+[PASS] the only missing calendar days are Dec 25   (4 missing days)
+[PASS] inside each series dates are strictly increasing (sorted)
+
+==============================================================================
+E. Stores merge
+==============================================================================
+[PASS] each store has exactly ONE city/state/type/cluster
+[PASS] store attributes equal stores.csv
+
+==============================================================================
+F. Oil (independent re-computation from oil.csv)
+==============================================================================
+[PASS] oil_price has no missing values and is > 0   (min=26.19 max=110.62)
+[PASS] one oil price per date (same for all stores)
+[PASS] oil_price equals 'carry last known price forward' recomputed from oil.csv
+[PASS] oil_is_filled = 1 exactly on days without a real price   (521 filled days of 1684)
+[PASS] on days with a real price, the value is untouched
+
+==============================================================================
+G. Holiday flags (independent re-computation from holidays_events.csv)
+==============================================================================
+[PASS] all holiday flags contain only 0 and 1
+[PASS] flags are the same for all families of a store on a day
+[PASS] is_holiday_national matches the real holidays of scope National   (4,212 store-days)
+[PASS] is_holiday_regional matches the real holidays of scope Regional   (31 store-days)
+[PASS] is_holiday_local matches the real holidays of scope Local   (360 store-days)
+[PASS] is_holiday = national OR regional OR local
+[PASS] is_event matches the Event rows
+[PASS] is_earthquake matches the earthquake rows   (1,674 store-days)
+[PASS] is_work_day matches the Work Day rows
+[PASS] TRANSFERRED national holidays are treated as normal days   (8 transferred dates checked, 7 inside data range)
+[PASS] the day a national holiday was moved TO is a real holiday for all stores   (7 dates checked)
+[WARN] Jan 1 is a national holiday for all stores (known fact)
+[PASS] 2016-04-16 (earthquake day) is flagged (known fact)
+
+==============================================================================
+H. Quality-control flags (zero series, first sale, closed store, outliers)
+==============================================================================
+[PASS] qc flags contain only 0 and 1
+[PASS] qc_zero_series = series with no sale up to the cutoff date   (54 of 1782 series)
+[PASS] qc_zero_series is constant inside each series
+[PASS] zero series really have zero sales up to the cutoff
+[PASS] qc_before_first_sale = days before the first sale (up to cutoff)   (553,761 rows)
+[PASS] no sale ever happens on a 'before first sale' row
+[PASS] no 'before first sale' flag after the cutoff
+[PASS] qc_store_closed_day = store sold nothing in any family   (241,890 rows)
+[PASS] outliers are real sales (> 0)
+[PASS] outlier share is small (< 5%)   (0.64%)
+
+==============================================================================
+I. Fingerprint of the official Kaggle files (WARN only)
+==============================================================================
+[PASS] rows = 3,000,888   (3,000,888)
+[PASS] 54 stores   (54)
+[PASS] 33 families   (33)
+[PASS] 1684 distinct dates   (1684)
+[PASS] date range 2013-01-01 -> 2017-08-15   (2013-01-01 -> 2017-08-15)
+
+==============================================================================
+J. Cleaned test file (Kaggle test period)
+==============================================================================
+[PASS] test_clean.parquet exists
+[PASS] columns are exactly the agreed schema
+[PASS] same rows, same ids, SAME ORDER as test.csv (needed for the submission file)   (28,512 rows)
+[PASS] date / store / family / onpromotion identical to test.csv
+[PASS] no missing values   (none)
+[PASS] oil_price > 0 on every test day
+[PASS] all flags contain only 0 and 1
+[PASS] every test series also exists in train   (1782 series)
+[PASS] test starts after train ends   (2017-08-16 -> 2017-08-31)
+[PASS] test range 2017-08-16 -> 2017-08-31 and 28,512 rows
+
+==============================================================================
+FINAL RESULT
+==============================================================================
+PASS = 64   WARN = 1   FAIL = 0
+DATA IS CLEAN: all required checks passed.  (read the WARN lines above)
