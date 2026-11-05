@@ -1,0 +1,115 @@
+
+==============================================================================
+STOCKWISE AI - RAW DATA INSPECTION
+==============================================================================
+project root : C:\Users\pc\OneDrive\Desktop\StockWise_AI
+  train.csv                121.8 MB
+  test.csv                 1.0 MB
+  stores.csv               0.0 MB
+  oil.csv                  0.0 MB
+  holidays_events.csv      0.0 MB
+  transactions.csv         1.6 MB
+  sample_submission.csv    0.3 MB
+
+==============================================================================
+train  (train.csv)
+==============================================================================
+shape        : 3,000,888 rows x 6 columns
+columns      : id [int64], date [datetime64[ns]], store_nbr [int64], family [str], sales [float64], onpromotion [int64]
+missing      : none
+duplicates   : 0 fully duplicated rows
+date range   : 2013-01-01 -> 2017-08-15 (1,684 unique dates)
+
+-- train details --
+stores / families / dates : 54 / 33 / 1684
+full grid would be        : 3,000,888 rows;  actual: 3,000,888 rows
+calendar days with NO rows : 4  (2013-12-25, 2014-12-25, 2015-12-25, 2016-12-25)
+   -> all are Dec 25 (stores closed) - expected, not an error
+duplicate (date, store, family) keys : 0
+sales  : min=0.00  max=124,717.00  mean=357.78  zero share=31.3%  negative rows=0
+onpromotion : min=0  max=741  share of rows with promo=20.4%
+
+==============================================================================
+test  (test.csv)
+==============================================================================
+shape        : 28,512 rows x 5 columns
+columns      : id [int64], date [datetime64[ns]], store_nbr [int64], family [str], onpromotion [int64]
+missing      : none
+duplicates   : 0 fully duplicated rows
+date range   : 2017-08-16 -> 2017-08-31 (16 unique dates)
+
+-- test details --
+forecast horizon : 16 days  (starts 2017-08-16, train ends 2017-08-15)
+series in test but not in train : 0
+
+==============================================================================
+stores  (stores.csv)
+==============================================================================
+shape        : 54 rows x 5 columns
+columns      : store_nbr [int64], city [str], state [str], type [str], cluster [int64]
+missing      : none
+duplicates   : 0 fully duplicated rows
+
+-- stores details --
+unique store_nbr : 54 (rows: 54)
+cities / states / types / clusters : 22 / 16 / 5 / 17
+train stores missing from stores.csv : none
+
+==============================================================================
+oil  (oil.csv)
+==============================================================================
+shape        : 1,218 rows x 2 columns
+columns      : date [datetime64[ns]], dcoilwtico [float64]
+missing      : dcoilwtico=43
+duplicates   : 0 fully duplicated rows
+date range   : 2013-01-01 -> 2017-08-31 (1,218 unique dates)
+
+-- oil details --
+duplicate dates          : 0
+train days without a real oil price : 525 of 1,688  (weekends/holidays/blanks - will be carried forward)
+first oil row (2013-01-01) has no price : True  (will be back-filled from the first real price)
+price range              : 26.19 -> 110.62
+
+==============================================================================
+holidays  (holidays_events.csv)
+==============================================================================
+shape        : 350 rows x 6 columns
+columns      : date [datetime64[ns]], type [str], locale [str], locale_name [str], description [str], transferred [bool]
+missing      : none
+duplicates   : 0 fully duplicated rows
+date range   : 2012-03-02 -> 2017-12-26 (312 unique dates)
+
+-- holidays details --
+rows by type   : Holiday=221, Event=56, Additional=51, Transfer=12, Bridge=5, Work Day=5
+rows by locale : National=174, Local=152, Regional=24
+transferred=True rows : 12  (the holiday was moved - NOT a day off on that date)
+unknown types : none
+regional holidays in states with no store : none
+local holidays in cities with no store     : none
+
+==============================================================================
+transactions  (transactions.csv)
+==============================================================================
+shape        : 83,488 rows x 3 columns
+columns      : date [datetime64[ns]], store_nbr [int64], transactions [int64]
+missing      : none
+duplicates   : 0 fully duplicated rows
+date range   : 2013-01-01 -> 2017-08-15 (1,682 unique dates)
+
+-- note: transactions.csv is NOT used in the clean file: it does not exist for the future (test) days, so using it would be a leak.
+
+==============================================================================
+sample_submission  (sample_submission.csv)
+==============================================================================
+shape        : 28,512 rows x 2 columns
+columns      : id [int64], sales [float64]
+missing      : none
+duplicates   : 0 fully duplicated rows
+
+-- sample_submission ids match test ids : True
+
+==============================================================================
+SUMMARY
+==============================================================================
+No blocking problems found in the raw files.
+Known quirks that prepare_data.py handles: oil blanks, transferred holidays, Dec 25 gap.
