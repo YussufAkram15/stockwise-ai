@@ -221,3 +221,6 @@ __marimo__/
 data/raw/
 mlruns/
 .env
+
+.venv/
+mlflow.db
