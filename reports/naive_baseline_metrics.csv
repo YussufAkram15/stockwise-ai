@@ -1,0 +1,3 @@
+,MAE,RMSE,WAPE_%
+validation,85.54,318.98,17.5
+test,92.72,335.98,19.85
