@@ -1,4 +1,4 @@
-﻿"""STEP 1 (Zenab): look at the raw files BEFORE cleaning anything.
+"""STEP 1 (Zenab): look at the raw files BEFORE cleaning anything.
 
 Run from the project root:   python src/inspect_data.py
 Nothing is modified. The result is printed and saved to reports/inspection_report.txt

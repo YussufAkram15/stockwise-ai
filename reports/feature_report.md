@@ -6,35 +6,33 @@ Re-run `python src/feature_engineering.py` to refresh.
 - Total rows : 3,000,888
 - Train rows (≤ 2017-06-30) : 2,918,916
 - Val rows (2017-07-01 → 2017-08-15) : 81,972
-- Columns : 49
+- Columns : 47
 
 ## Feature groups
 
 | Group | Features | Count |
 |---|---|---|
 | Calendar | `day_of_week`, `day_of_month`, `week_of_year`, `month`, `quarter`, `year`, `is_weekend`, `days_to_month_end`, `is_payday` | 9 |
-| Sales lags | `sales_lag_7`, `sales_lag_14`, `sales_lag_16`, `sales_lag_30` | 4 |
-| Rolling stats | `sales_roll_7_mean`, `sales_roll_14_mean`, `sales_roll_30_mean`, `sales_roll_7_std`, `promo_roll_7_mean`, `oil_roll_7_mean` | 6 |
-| Promo/Oil lags | `promo_lag_7`, `oil_lag_7` | 2 |
+| Sales lags | `sales_lag_16`, `sales_lag_21`, `sales_lag_28` | 3 |
+| Rolling stats | `sales_roll_7_mean`, `sales_roll_28_mean`, `promo_roll_7_mean` | 3 |
+| Promo/Oil lags | `promo_lag_7`, `oil_lag_16`, `oil_lag_21`, `oil_lag_28` | 4 |
 | Encodings | `store_type_enc`, `store_family_mean_sales`, `family_enc`, `city_enc`, `state_enc` | 5 |
 
 ## NaN counts in feature columns (expected for early-history rows)
 
 | Feature | NaN rows |
 |---|---|
-| `sales_lag_7` | 19,602 |
-| `sales_lag_14` | 32,076 |
 | `sales_lag_16` | 35,640 |
-| `sales_lag_30` | 60,588 |
-| `sales_roll_7_mean` | 1,782 |
-| `sales_roll_14_mean` | 1,782 |
-| `sales_roll_30_mean` | 1,782 |
-| `sales_roll_7_std` | 3,564 |
+| `sales_lag_21` | 44,550 |
+| `sales_lag_28` | 57,024 |
+| `sales_roll_7_mean` | 37,422 |
+| `sales_roll_28_mean` | 37,422 |
 | `promo_roll_7_mean` | 1,782 |
-| `oil_roll_7_mean` | 1,782 |
-| `store_family_mean_sales` | 1,782 |
+| `store_family_mean_sales` | 35,640 |
 | `promo_lag_7` | 19,602 |
-| `oil_lag_7` | 19,602 |
+| `oil_lag_16` | 35,640 |
+| `oil_lag_21` | 44,550 |
+| `oil_lag_28` | 57,024 |
 
 > [!NOTE]
 > NaNs in lag/rolling columns are expected for the first N rows of each series
