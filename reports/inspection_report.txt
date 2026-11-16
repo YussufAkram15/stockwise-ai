@@ -2,7 +2,7 @@
 ==============================================================================
 STOCKWISE AI - RAW DATA INSPECTION
 ==============================================================================
-project root : C:\Users\pc\OneDrive\Desktop\StockWise_AI
+project root : C:\stockwise-ai
   train.csv                121.8 MB
   test.csv                 1.0 MB
   stores.csv               0.0 MB

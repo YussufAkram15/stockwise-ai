@@ -6,7 +6,7 @@ It reads data/processed/train_clean.parquet. `sales` in that file is identical t
 train.csv (the validation proves it), the file just has extra columns (store type,
 holiday flags) that make the charts easier.
 
-Output (data/reports/eda/):
+Output (reports/eda/):
     01_...png to 09_...png   the charts
     eda_notes.md             plain sentences with REAL numbers from the data
 """

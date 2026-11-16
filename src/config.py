@@ -1,8 +1,9 @@
-"""Central settings for the StockWise AI data-cleaning step.
+"""Central configuration for the StockWise AI project.
 
-Every script imports its paths and constants from here, so nothing is
-written twice and the whole team uses exactly the same rules.
+Defines project paths, data-cleaning rules, validation settings,
+feature schemas, and model artifact locations.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,7 +14,14 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
-REPORTS_DIR = PROJECT_ROOT / "data" / "reports"
+
+# All reports and comparison outputs
+REPORTS_DIR = PROJECT_ROOT / "reports"
+FIGURES_DIR = REPORTS_DIR / "figures"
+
+
+
+
 
 RAW_FILES = {
     "train": RAW_DIR / "train.csv",
@@ -32,10 +40,27 @@ HOLIDAYS_CLEAN_PATH = PROCESSED_DIR / "holidays_clean.csv"
 OIL_DAILY_PATH = PROCESSED_DIR / "oil_daily_filled.csv"
 SERIES_SUMMARY_PATH = PROCESSED_DIR / "series_summary.csv"
 
+FEATURES_TRAIN_PATH = PROCESSED_DIR / "train_features.parquet"
+FEATURES_TEST_PATH = PROCESSED_DIR / "test_features.parquet"
+
+MODELS_DIR = PROJECT_ROOT / "models"
+BEST_MODEL_PATH = MODELS_DIR / "best_model.pkl"
+
 EDA_DIR = REPORTS_DIR / "eda"
 INSPECTION_REPORT_PATH = REPORTS_DIR / "inspection_report.txt"
 CLEANING_REPORT_PATH = REPORTS_DIR / "cleaning_report.md"
 VALIDATION_REPORT_PATH = REPORTS_DIR / "validation_report.txt"
+FEATURE_REPORT_PATH = REPORTS_DIR / "feature_report.md"
+MODEL_COMPARISON_PATH = REPORTS_DIR / "model_comparison.md"
+BEST_PREDICTIONS_PATH = REPORTS_DIR / "best_model_predictions.parquet"
+
+MODEL_COMPARISON_RESULTS_PATH = (
+    REPORTS_DIR / "model_comparison_results.parquet"
+)
+
+MODEL_COMPARISON_METADATA_PATH = (
+    REPORTS_DIR / "model_comparison_metadata.json"
+)
 
 # ----------------------------------------------------------------------------
 # Cleaning decisions (change them here, and only here)
@@ -51,6 +76,13 @@ KNOWN_LOCALES = ("National", "Regional", "Local")
 # data up to this date, so nothing from validation/test leaks into the flags.
 # Must be the same date as "train ends" in Sara's split.
 CLEANING_STATS_CUTOFF = "2017-06-30"
+
+# ----------------------------------------------------------------------------
+# Train / validation split (Sara's split — time-based, never shuffle)
+# ----------------------------------------------------------------------------
+TRAIN_END   = "2017-06-30"   # last day of the training window
+VAL_START   = "2017-07-01"   # first day of the validation window
+VAL_END     = "2017-08-15"   # last day of the validation window (= train.csv end)
 
 # Outlier rule: a sale is flagged when it is above  Q3 + k * IQR  of the
 # non-zero days of ITS OWN series (store x family). Flagged, never removed.

@@ -221,3 +221,12 @@ __marimo__/
 data/raw/
 mlruns/
 .env
+
+# Local generated data and archives
+data/processed/
+data/*.zip
+
+# Local MLflow database
+mlflow.db
+mlflow.db-shm
+mlflow.db-wal
