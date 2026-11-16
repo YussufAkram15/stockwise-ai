@@ -1,4 +1,4 @@
-﻿"""PROOF that the cleaned data is correct.
+"""PROOF that the cleaned data is correct.
 
 Run from the project root:   python src/validate_data.py
 (prepare_data.py also runs it automatically at the end.)

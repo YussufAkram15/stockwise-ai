@@ -1,4 +1,4 @@
-﻿"""STEPS 2-6 (Zenab): merge + clean the raw tables and save the cleaned files.
+"""STEPS 2-6 (Zenab): merge + clean the raw tables and save the cleaned files.
 
 Run from the project root:
     python src/prepare_data.py              # clean, save, then run the validation checks

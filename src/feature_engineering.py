@@ -1,4 +1,4 @@
-﻿"""STEP 7 (Adham): Feature engineering — build model-ready features from the cleaned data.
+"""STEP 7 (Adham): Feature engineering — build model-ready features from the cleaned data.
 
 Run from the project root (after prepare_data.py):
     python src/feature_engineering.py
@@ -13,10 +13,10 @@ Feature groups
 --------------
   Calendar  : day_of_week, day_of_month, week_of_year, month, quarter,
                is_weekend, days_to_month_end, is_payday
-  Lag       : sales_lag_7/14/16/30  (date-merge, never .shift — Dec-25 safe)
-  Rolling   : sales_roll_7/14/30_mean, sales_roll_7_std  (same approach)
+    Lag       : sales_lag_16/21/28
+    Rolling   : sales_roll_7/28_mean (shifted by 16 days)
   Promo     : onpromotion already present + promo_lag_7, promo_roll_7_mean
-  Oil       : oil_price already present + oil_lag_7, oil_roll_7_mean
+  Oil       : oil_lag_16, oil_lag_21, oil_lag_28
   Encoding  : store_family_mean_sales (global series mean, train only)
                store_type_enc (A→0 … E→4), cluster already numeric
                family_enc, city_enc, state_enc  (ordinal, train only)
@@ -43,8 +43,8 @@ from data_io import setup_console
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-LAG_DAYS   = [7, 14, 16, 30]
-ROLL_WINS  = [7, 14, 30]
+LAG_DAYS   = [  16, 21 , 28]
+ROLL_WINS  = [7, 28]
 KEY        = ["store_nbr", "family"]
 STORE_TYPE_MAP = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
 
@@ -199,7 +199,8 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ---------------------------------------------------------------------------
+# --------------------------
+# ------------------------------------------------
 # Lag features (sales + promo + oil)
 # ---------------------------------------------------------------------------
 def add_lag_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -211,29 +212,45 @@ def add_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     df["promo_lag_7"] = _fast_lag(df, "onpromotion", 7).astype("float32")
 
     print("  Computing oil lags ...")
-    df["oil_lag_7"] = _fast_lag(df, "oil_price", 7).astype("float32")
-
+    df["oil_lag_16"] = _fast_lag(df, "oil_price", 16).astype("float32")
+    df["oil_lag_21"] = _fast_lag(df, "oil_price", 21).astype("float32")
+    df["oil_lag_28"] = _fast_lag(df, "oil_price", 28).astype("float32")
     return df
 
 
 # ---------------------------------------------------------------------------
 # Rolling features
 # ---------------------------------------------------------------------------
+
 def add_rolling_features(df: pd.DataFrame) -> pd.DataFrame:
     print("  Computing sales rolling means ...")
-    for w in ROLL_WINS:
-        df[f"sales_roll_{w}_mean"] = _fast_roll(df, "sales", w, "mean").astype("float32")
 
-    print("  Computing sales rolling std ...")
-    df["sales_roll_7_std"] = _fast_roll(df, "sales", 7, "std").astype("float32")
+    # Calculate rolling statistics first, then shift them
+    # 16 days backward-to-forward using date-safe lag.
+    for w in ROLL_WINS:
+        rolling_col = f"_sales_roll_{w}_mean"
+
+        df[rolling_col] = _fast_roll(
+            df, "sales", w, "mean"
+        ).astype("float32")
+
+        df[f"sales_roll_{w}_mean"] = _fast_lag(
+            df, rolling_col, 16
+        ).astype("float32")
+
+        del df[rolling_col]
 
     print("  Computing promo rolling mean ...")
-    df["promo_roll_7_mean"] = _fast_roll(df, "onpromotion", 7, "mean").astype("float32")
+    df["promo_roll_7_mean"] = _fast_roll(
+        df, "onpromotion", 7, "mean"
+    ).astype("float32")
 
-    print("  Computing oil rolling mean ...")
-    df["oil_roll_7_mean"] = _fast_roll(df, "oil_price", 7, "mean").astype("float32")
+    print("  Computing oil rolling features ...")
+    # Oil rolling features will be corrected separately
+    # after agreeing on the oil information availability.
 
     return df
+
 
 
 # ---------------------------------------------------------------------------
@@ -247,45 +264,29 @@ def add_encodings(df: pd.DataFrame, train_mask: pd.Series) -> pd.DataFrame:
         .astype("int8")
     )
 
-    # Initialize mean encoding
-    df["store_family_mean_sales"] = np.nan
 
-    # Extract training data and sort chronologically
-    train_rows = df.loc[train_mask, KEY + ["date", "sales"]].copy()
-    train_rows = train_rows.sort_values(KEY + ["date"])
+    # Sort chronologically within each store-family series
+    df = df.sort_values(KEY + ["date"]).copy()
+    
+    train_mask = train_mask.reindex(df.index)
 
-    # Historical expanding mean: only previous sales are used
-    train_rows["store_family_mean_sales"] = (
-        train_rows.groupby(KEY, sort=False)["sales"]
+    # Calculate cumulative historical mean for each store-family.
+    # For forecast date t, use only information available at t - 16 days.
+    df["_series_cumulative_mean"] = (
+        df.groupby(KEY, sort=False)["sales"]
         .transform(
-            lambda s: s.shift(1).expanding(min_periods=1).mean()
+            lambda s: s.expanding(min_periods=1).mean()
         )
     )
 
-    # Assign historical means back to training rows
-    df.loc[
-        train_rows.index, "store_family_mean_sales"
-    ] = train_rows["store_family_mean_sales"]
-
-    # Calculate final training mean for validation and test
-    series_mean = (
-        train_rows.groupby(KEY)["sales"]
-        .mean()
-    )
-
-    future_mask = ~train_mask
-
-    future_index = pd.MultiIndex.from_frame(
-        df.loc[future_mask, KEY]
-    )
-
-    df.loc[
-        future_mask, "store_family_mean_sales"
-    ] = series_mean.reindex(future_index).to_numpy()
-
+    # Apply the 16-day embargo
     df["store_family_mean_sales"] = (
-        df["store_family_mean_sales"].astype("float32")
+        _fast_lag(df, "_series_cumulative_mean", 16)
+        .astype("float32")
     )
+
+    df = df.drop(columns=["_series_cumulative_mean"])
+
 
     # Ordinal encoding for categorical features
     for col, new_col in [
@@ -344,6 +345,7 @@ def build_features(
 
     print("[FE] Encoding features ...")
     combined = add_encodings(combined, train_mask)
+    combined = combined.sort_index()
 
     # Split back
     if test_clean is not None:
@@ -366,7 +368,12 @@ def write_feature_report(df: pd.DataFrame) -> None:
                  "quarter", "year", "is_weekend", "days_to_month_end", "is_payday"]
     enc_cols  = ["store_type_enc", "store_family_mean_sales",
                  "family_enc", "city_enc", "state_enc"]
-    other_lag = ["promo_lag_7", "oil_lag_7"]
+    other_lag = [
+        "promo_lag_7",
+        "oil_lag_16",
+        "oil_lag_21",
+        "oil_lag_28"
+    ]
     
     all_feat = list(dict.fromkeys(
         lag_cols + roll_cols + cal_cols + enc_cols + other_lag

@@ -60,28 +60,36 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # Feature columns used by all models
 # (Never include sales, qc_ flags, raw text, or the date itself)
 # ---------------------------------------------------------------------------
+
 FEATURE_COLS = [
     # Calendar
     "day_of_week", "day_of_month", "week_of_year", "month", "quarter", "year",
     "is_weekend", "days_to_month_end", "is_payday",
+
     # Store / series encodings
     "store_nbr", "store_type_enc", "cluster",
     "family_enc", "city_enc", "state_enc",
     "store_family_mean_sales",
+
     # Promo
     "onpromotion", "promo_lag_7", "promo_roll_7_mean",
-    # Oil
-    "oil_price", "oil_is_filled", "oil_lag_7", "oil_roll_7_mean",
+
+    # Oil (16-day embargo)
+    "oil_lag_16", "oil_lag_21", "oil_lag_28",
+
     # Holiday / event flags
-    "is_holiday", "is_holiday_national", "is_holiday_regional", "is_holiday_local",
-    "is_event", "is_earthquake", "is_work_day",
-    # Sales lags
-    "sales_lag_7", "sales_lag_14", "sales_lag_16", "sales_lag_30",
-    # Rolling stats
-    "sales_roll_7_mean", "sales_roll_14_mean", "sales_roll_30_mean", "sales_roll_7_std",
+    "is_holiday", "is_holiday_national", "is_holiday_regional",
+    "is_holiday_local", "is_event", "is_earthquake", "is_work_day",
+
+    # Sales lags (16-day embargo)
+    "sales_lag_16", "sales_lag_21", "sales_lag_28",
+
+    # Rolling stats (shifted by 16 days)
+    "sales_roll_7_mean", "sales_roll_28_mean",
 ]
 
 TARGET = "sales"
+
 
 
 # ---------------------------------------------------------------------------
