@@ -240,7 +240,7 @@ Five models are compared on exactly the same days:
 
 Why WAPE is the main score: it is a percentage a manager understands; big families (most of the units) count most; and it works with zero-sales rows. The common MAPE divides each row by its own sales and breaks on the 31% of rows with zero sales.
 
-> **Status:** `train_models.py` and `compare_models.py` are first versions. They still use the old split (validation up to 2017-08-15, no test period) and the RMSLE score. They are being moved to the agreed split and to MAE / RMSE / WAPE, so their numbers are **not** final results yet.
+> **Status:** `train_models.py` and `compare_models.py` are first versions. They already use the agreed split from `src/config.py` (validation = the same 30 days as the baseline), but they still score with RMSLE. They are being moved to MAE / RMSE / WAPE, so their numbers are **not** final results yet.
 
 ---
 
@@ -249,7 +249,7 @@ Why WAPE is the main score: it is a percentage a manager understands; big famili
 | Rule | Value |
 |---|---|
 | Forecast horizon | 16 days |
-| Split by date, **never shuffled** | Train: up to 2017-06-30 · Validation: 2017-07-01 → 2017-07-30 · Test: 2017-07-31 → 2017-08-15 |
+| Split by date, **never shuffled** | Train: up to 2017-06-30 · Validation: 2017-07-01 → 2017-07-30 · Test: 2017-07-31 → 2017-08-15 (set once in `src/config.py`: `TRAIN_END`, `VAL_START`, `VAL_END`, `TEST_START`, `TEST_END`) |
 | Test period | Used **once**, at the end, for the chosen model only |
 | Scores | MAE, RMSE, WAPE (WAPE is the main one) |
 | Lags | 16, 21, 28 days, per store and family |
@@ -488,8 +488,9 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 | EDA charts and notes | Hazem | ✅ A version is in the repository (`src/eda.py`); Hazem's own version is not yet |
 | Naive baseline | Yussuf | ✅ Done, logged in MLflow as `naive_lag21` |
 | Feature engineering | Adham | ✅ Done (lags 16/21/28, rolling 7/28 shifted by 16); leakage check with Sara still to do |
-| Split, scores and MLflow helpers | Sara | ⏳ Not yet — `src/config.py` still has the old split |
-| Linear, Random Forest, XGBoost | Hazem, Adham, Sara | 🟡 First versions in `src/train_models.py`; must move to the agreed split and scores |
+| Split dates | Sara | ✅ Done — agreed train / validation / test dates in `src/config.py`, used by `feature_engineering.py` and `train_models.py` |
+| Shared split function, scores (MAE / RMSE / WAPE) and MLflow helpers | Sara | ⏳ Not yet |
+| Linear, Random Forest, XGBoost | Hazem, Adham, Sara | 🟡 First versions in `src/train_models.py` use the agreed split; must move to MAE / RMSE / WAPE |
 | Polynomial Regression | Zenab | ⏳ Not yet |
 | Model comparison, error analysis, final test score | Sara, Yussuf | ⏳ Not yet |
 
@@ -499,7 +500,7 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 
 **Now (Level 1, the graded core):**
 
-- Move all models to the agreed split and to MAE / RMSE / WAPE, and log them in MLflow.
+- Score all models with MAE / RMSE / WAPE (the split is already in place) and log them in MLflow.
 - Add Polynomial Regression.
 - XGBoost's early stopping currently looks at the validation period it is scored on; it should use the end of the training period instead.
 - Compare all five models, study where the best one is wrong (by date, store, family, holidays), then score the test period **once**.
