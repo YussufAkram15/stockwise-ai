@@ -322,7 +322,7 @@ def build_features(
         combined = pd.concat([train_clean, test_ext], ignore_index=True)
         is_test = combined["date"] >= pd.Timestamp(config.VAL_START)
         # Actually test.csv starts 2017-08-16 (after val window); keep them separate
-        is_kaggle_test = combined["date"] > pd.Timestamp(config.VAL_END)
+        is_kaggle_test = combined["date"] > pd.Timestamp(config.TEST_END)
     else:
         combined = train_clean.copy()
         is_kaggle_test = pd.Series(False, index=combined.index)

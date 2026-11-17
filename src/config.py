@@ -82,7 +82,10 @@ CLEANING_STATS_CUTOFF = "2017-06-30"
 # ----------------------------------------------------------------------------
 TRAIN_END   = "2017-06-30"   # last day of the training window
 VAL_START   = "2017-07-01"   # first day of the validation window
-VAL_END     = "2017-08-15"   # last day of the validation window (= train.csv end)
+VAL_END     = "2017-07-30"   # last day of the validation window (30 days)
+TEST_START  = "2017-07-31"   # first day of the test window (16 days = the forecast horizon)
+TEST_END    = "2017-08-15"   # last day of the test window (= last day of train.csv)
+# The test window is scored ONCE, at the end, for the chosen model only.
 
 # Outlier rule: a sale is flagged when it is above  Q3 + k * IQR  of the
 # non-zero days of ITS OWN series (store x family). Flagged, never removed.
