@@ -83,7 +83,7 @@ python src/inspect_data.py
 python src/prepare_data.py
 ```
 
-This writes the cleaned tables to `data/processed/` (main file: `train_clean.parquet`) and then runs `src/validate_data.py`, which checks that no row was lost or changed. The text reports go to `data/reports/` (copies of the last run are kept in `reports/`).
+This writes the cleaned tables to `data/processed/` (main file: `train_clean.parquet`) and then runs `src/validate_data.py`, which checks that no row was lost or changed. The text reports go to `reports/`.
 
 > `data/processed/` holds large generated files. Anyone can re-create them with this command, so please do not commit them.
 
@@ -95,7 +95,24 @@ python src/eda.py
 
 **4. Naive baseline:** open `notebooks/02_naive_baseline_yussuf.ipynb` and run all cells. It needs only `data/raw/train.csv`.
 
-**5. Open the experiment logbook:**
+**5. Build the features** (lags 16/21/28 and rolling means 7/28 shifted by 16, all grouped by store and family):
+
+```bash
+python src/feature_engineering.py
+```
+
+This writes `data/processed/train_features.parquet` and `reports/feature_report.md`.
+
+**6. Train and compare the models** (work in progress, see Status):
+
+```bash
+python src/train_models.py
+python src/compare_models.py
+```
+
+> These two scripts still use the old split (validation up to 2017-08-15, no test set) and RMSLE. They are being moved to the agreed split and to MAE / RMSE / WAPE, so do not quote their numbers yet.
+
+**7. Open the experiment logbook:**
 
 ```bash
 mlflow ui --backend-store-uri sqlite:///mlflow.db
@@ -114,17 +131,18 @@ The naive baseline predicts "the same sales as 21 days ago" (same weekday, three
 
 These numbers are produced by the baseline notebook and saved in `reports/naive_baseline_metrics.csv`.
 
-## Status (13 November 2026)
+## Status (17 November 2026)
 
 | Step | Owner | In this repository |
 |---|---|---|
 | Data inspection, cleaning, validation | Zenab | Done — `src/inspect_data.py`, `src/prepare_data.py`, `src/validate_data.py` |
 | EDA charts and notes | Hazem | A version came in with the cleaning work: `src/eda.py`, `reports/eda/`. Hazem's own version is not in the repository yet |
-| Naive baseline | Yussuf | Done — `notebooks/02_naive_baseline_yussuf.ipynb` |
-| Feature engineering | Adham | Not yet |
-| Split, metrics and MLflow helpers | Sara | Not yet |
-| Linear, Polynomial, Random Forest, XGBoost | Hazem, Zenab, Adham, Sara | Not yet |
-| Model comparison, residual analysis, 16-day forecast file | Sara, Yussuf | Not yet |
+| Naive baseline | Yussuf | Done — `notebooks/02_naive_baseline_yussuf.ipynb`, logged in MLflow as `naive_lag21` |
+| Feature engineering | Adham | Done — `src/feature_engineering.py` (lags 16/21/28, rolling 7/28 shifted by 16). Leakage check with Sara still to do |
+| Split, metrics and MLflow helpers | Sara | Not yet. `src/config.py` still has the old split (validation up to 2017-08-15, no test set) |
+| Linear, Random Forest, XGBoost | Hazem, Adham, Sara | First versions in `src/train_models.py`; they must move to the agreed split and MAE / RMSE / WAPE before their scores count |
+| Polynomial Regression | Zenab | Not yet |
+| Model comparison, residual analysis, 16-day forecast file | Sara, Yussuf | Not yet (`src/compare_models.py` is a first version) |
 
 ## Folders
 
@@ -132,6 +150,7 @@ These numbers are produced by the baseline notebook and saved in `reports/naive_
 data/raw/         raw Kaggle files (not in Git)
 data/processed/   cleaned files made by src/prepare_data.py (generated, not committed)
 docs/             project documents (requirements, planning, literature review)
+models/           saved trained models (generated, not committed)
 notebooks/        one notebook per piece of work
 reports/          generated reports and figures
 src/              reusable Python code

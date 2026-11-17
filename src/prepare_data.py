@@ -5,7 +5,7 @@ Run from the project root:
     python src/prepare_data.py --csv        # also write data/processed/train_clean.csv
     python src/prepare_data.py --skip-validation
 
-What it does (every decision is also written to data/reports/cleaning_report.md):
+What it does (every decision is also written to reports/cleaning_report.md):
   2. merge stores.csv and oil.csv into the sales rows
   3. fill missing oil prices (carry the last known price forward)
   4. sort out holidays (transferred holidays are normal days; events are separate)
