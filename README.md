@@ -1,903 +1,528 @@
-# stockwise-ai
-# StockWise AI — Store Sales Forecasting
+# StockWise AI — Retail Demand Forecasting
 
-An end-to-end Machine Learning project for analyzing retail sales data, engineering time-series features, training multiple regression models, and comparing their forecasting performance.
+StockWise AI predicts **how many units each supermarket store will sell of each product family, for each of the next 16 days**. It uses four and a half years of real daily sales from a supermarket chain in Ecuador, together with promotions, holidays, oil prices and store information.
 
-StockWise AI uses historical sales, store information, promotions, oil prices, calendar information, and holidays to predict daily sales for different product families across multiple stores.
-
----
-
-## Table of Contents
-
-- [Project Overview](#project-overview)
-- [The Problem](#the-problem)
-- [Dataset](#dataset)
-- [Project Workflow](#project-workflow)
-- [Data Processing](#data-processing)
-- [Exploratory Data Analysis](#exploratory-data-analysis)
-- [Feature Engineering](#feature-engineering)
-- [Model Training](#model-training)
-- [Model Evaluation](#model-evaluation)
-- [Results](#results)
-- [Project Structure](#project-structure)
-- [Installation](#installation)
-- [How to Run the Project](#how-to-run-the-project)
-- [Generated Outputs](#generated-outputs)
-- [Important Technical Decisions](#important-technical-decisions)
-- [Current Limitations](#current-limitations)
-- [Technologies Used](#technologies-used)
+This is the DEPI Machine Learning capstone of a five-person team. This README is written so that **someone who has never seen the project** can understand what it does, why it is built this way, and run it on their own computer.
 
 ---
 
-## Project Overview
+## Table of contents
 
-StockWise AI is a retail sales forecasting project built using Python and Machine Learning.
+1. [The problem in plain words](#1-the-problem-in-plain-words)
+2. [The data](#2-the-data)
+3. [Words you need to know](#3-words-you-need-to-know)
+4. [How the project works, step by step](#4-how-the-project-works-step-by-step)
+5. [The rules the whole team follows](#5-the-rules-the-whole-team-follows)
+6. [Results so far](#6-results-so-far)
+7. [Project structure](#7-project-structure)
+8. [Installation](#8-installation)
+9. [How to run the project](#9-how-to-run-the-project)
+10. [What each step produces](#10-what-each-step-produces)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Team and status](#12-team-and-status)
+13. [Limitations and next steps](#13-limitations-and-next-steps)
+14. [Technologies used](#14-technologies-used)
 
-The project follows a complete data science workflow:
+---
 
-1. Raw data inspection.
-2. Data cleaning and validation.
-3. Exploratory Data Analysis (EDA).
-4. Feature engineering.
-5. Training multiple Machine Learning models.
-6. Model evaluation and comparison.
-7. Saving the best trained model.
-8. Generating reports and visualizations.
+## 1. The problem in plain words
 
-The main goal is not just to train a model, but to build a structured and reproducible pipeline in which every stage has a clear responsibility.
+A supermarket has to order stock **before** it sells it.
 
-## The Problem
+- Order **too little** → empty shelves, lost sales, unhappy customers.
+- Order **too much** → food expires, money is stuck in the storeroom.
 
-Retail businesses need to estimate future product demand to make better decisions about:
+So the manager wants to know: *"How much will each store sell of each type of product over the next two weeks?"* Guessing the future from the past like this is called a **forecast**.
 
-- Inventory management.
-- Product availability.
-- Stock replenishment.
-- Promotion planning.
-- Sales forecasting.
+**What we predict:** the number of units sold (`sales`) for every **store × product family × day**.
+**How far ahead:** **16 days** (the length of the Kaggle test period, and a realistic ordering window).
+**Type of problem:** **regression** (we predict a number), on **time-series** data (the order of the days matters).
 
-For example, imagine a store that sells beverages, groceries, cleaning products, and other product categories.
+Example of one real row we try to predict:
 
-The store needs to estimate how many units of each product category customers may buy tomorrow or in the coming days.
+| date | store_nbr | family | sales | onpromotion |
+|---|---|---|---|---|
+| 2017-08-15 | 44 | GROCERY I | 8123 | 37 |
 
-Historical sales alone may not be enough. Demand can also be affected by:
+*"On 15 August 2017, store 44 sold 8,123 units of GROCERY I items, while 37 items of that family were on promotion."*
 
-- The day of the week.
-- Seasonal patterns.
-- Promotions.
-- Holidays and special events.
-- Store characteristics.
-- Previous sales behavior.
-- External economic indicators such as oil prices.
+---
 
-StockWise AI explores these relationships and uses them to build forecasting models.
+## 2. The data
 
-## Dataset
-
-This project uses the **Store Sales - Time Series Forecasting** dataset from Kaggle.
-
-Dataset source:
-
-[Kaggle — Store Sales - Time Series Forecasting](https://www.kaggle.com/competitions/store-sales-time-series-forecasting)
-
-The dataset contains historical sales information from Favorita stores in Ecuador.
-
-### Dataset overview
+**Source:** the Kaggle competition [Store Sales – Time Series Forecasting](https://www.kaggle.com/competitions/store-sales-time-series-forecasting/data) (supermarket chain Corporación Favorita, Ecuador).
 
 | Property | Value |
-|---|---:|
-| Number of training rows | 3,000,888 |
-| Number of stores | 54 |
-| Number of product families | 33 |
-| Training date range | 2013-01-01 to 2017-08-15 |
-| Number of distinct training dates | 1,684 |
-| Test rows | 28,512 |
-| Test date range | 2017-08-16 to 2017-08-31 |
-
-Each training row represents the sales of one product family in one store on a particular date.
-
-### Dataset files
-
-| File | Description |
 |---|---|
-| `train.csv` | Historical sales data, including the target variable |
-| `test.csv` | Dates and store/product combinations requiring predictions |
-| `stores.csv` | Store information such as city, state, type, and cluster |
-| `oil.csv` | Daily oil price information |
-| `holidays_events.csv` | Holidays, events, and transferred holidays |
-| `transactions.csv` | Number of transactions per store and date |
-| `sample_submission.csv` | Example Kaggle submission format |
+| Training rows | 3,000,888 |
+| Stores | 54 |
+| Product families (e.g. GROCERY I, DAIRY, BOOKS) | 33 |
+| Series (one store × one family) | 54 × 33 = **1,782** |
+| Dates | 2013-01-01 → 2017-08-15 (1,684 days; 25 December is missing every year because stores are closed) |
+| Kaggle test period | 2017-08-16 → 2017-08-31 (16 days, 28,512 rows, no sales given) |
 
-### Main target variable
+### The files
 
-The target variable is:
+| File | What is in it | Used? |
+|---|---|---|
+| `train.csv` | Daily sales: date, store, family, sales, onpromotion | ✅ The main file |
+| `stores.csv` | City, state, store type (A–E), cluster of each store | ✅ Joined to every row |
+| `oil.csv` | Daily oil price (Ecuador's economy depends on oil) | ✅ Joined, with gaps filled |
+| `holidays_events.csv` | National, regional and local holidays and events | ✅ Turned into 0/1 flags |
+| `test.csv` | The 16 future days Kaggle asks for (no sales) | Optional (features for a Kaggle submission) |
+| `transactions.csv` | Number of customers per store per day | ❌ **Never used** — on a day we forecast, the number of customers is not known yet, so using it would be *leakage* (see below) |
+| `sample_submission.csv` | Kaggle answer format | Not used |
 
-` sales `
+The data is **not** stored in this repository (it is large, and Kaggle's rules say each user downloads it). Section 8 explains how to get it.
 
-It represents the number of units sold for a particular product family in a particular store on a particular day.
+---
 
-The project predicts this value using historical and engineered features.
+## 3. Words you need to know
 
-### Where to put the data
+| Word | Meaning in this project |
+|---|---|
+| **Target** | The number we predict: `sales`. |
+| **Feature** | A clue the model uses to predict the target (day of week, promotion, sales some days ago …). |
+| **Series** | The daily sales of one store × one family, e.g. store 44 DAIRY. |
+| **Horizon** | How far ahead we forecast: 16 days. |
+| **Lag** | The sales of the same series *N* days earlier, copied onto today's row. A model reads one row at a time and cannot "look back", so lags put the history on the row. `sales_lag_21` on 15 August = sales on 25 July. |
+| **Rolling mean** | The average of several days of sales, e.g. 7 days. More stable than one single day. |
+| **Leakage** | Using information the model would **not** have at forecast time. It makes scores look great and fails in real life. |
+| **Train / validation / test** | Train = the past the model learns from. Validation = "practice exam" used to compare and tune models. Test = "final exam", used **once** at the end. |
+| **Baseline** | A deliberately simple forecast. Every real model must beat it, or it is not worth using. |
+| **MAE, RMSE, WAPE** | Error scores (lower is better), explained in section 4.7. |
+| **MLflow** | A logbook that records every model run: its settings and its scores. |
 
-Download the Kaggle dataset and extract the required files into:
+### Why only lags of 16 days or more?
+
+Picture the real situation: it is the evening of 30 July, we know every sale up to today, and we must forecast 31 July → 15 August. For the **last** day, 15 August:
+
+| Lag | Copies sales from | Known on 30 July? |
+|---|---|---|
+| 7 days | 8 August | ❌ future |
+| 14 days | 1 August | ❌ future |
+| **16 days** | 30 July | ✅ |
+| **21 days** | 25 July | ✅ and the **same weekday** |
+| **28 days** | 18 July | ✅ and the same weekday |
+
+One model with the same columns is used for all 16 days, so a clue must exist for the farthest day. That is why **every sales-based feature is at least 16 days old**, and why rolling means are **shifted by 16 days**.
+
+---
+
+## 4. How the project works, step by step
 
 ```text
-data/
-└── raw/
-    ├── train.csv
-    ├── test.csv
-    ├── stores.csv
-    ├── oil.csv
-    ├── holidays_events.csv
-    ├── transactions.csv
-    └── sample_submission.csv
+ raw CSV files (data/raw/)
+        │
+        ▼
+ 1. Inspect the raw files ............ src/inspect_data.py
+        │
+        ▼
+ 2. Clean + merge ..................... src/prepare_data.py ──► data/processed/train_clean.parquet
+        │
+        ▼
+ 3. Validate the cleaned data ......... src/validate_data.py (runs automatically after step 2)
+        │
+        ▼
+ 4. Explore the data (EDA charts) ..... src/eda.py
+        │
+        ▼
+ 5. Naive baseline (number to beat) ... notebooks/02_naive_baseline_yussuf.ipynb
+        │
+        ▼
+ 6. Build features (clues) ............ src/feature_engineering.py ──► data/processed/train_features.parquet
+        │
+        ▼
+ 7. Train models + compare ............ src/train_models.py, src/compare_models.py
+        │
+        ▼
+ 8. Pick the best model, score the test period once (to do)
 ```
 
-The raw and processed datasets are excluded from Git to avoid uploading large data files.
+All paths and team rules live in one file, `src/config.py`, so every script uses the same settings.
 
-## Project Workflow
+### 4.1 Inspect the raw files — `src/inspect_data.py`
 
-The project is organized into independent Python scripts.
+Reads the seven CSV files **without changing anything** and reports their size, columns, missing values, duplicates and date ranges. Result: no blocking problems. Known quirks: oil prices have gaps, some holidays were moved to another day ("transferred"), and 25 December has no rows.
+Report: `reports/inspection_report.txt`.
 
-Each script performs a specific stage of the pipeline.
+### 4.2 Clean and merge — `src/prepare_data.py`
 
-```text
-Raw Data
-   |
-   v
-Data Inspection
-   |
-   v
-Data Cleaning
-   |
-   v
-Data Validation
-   |
-   v
-Exploratory Data Analysis
-   |
-   v
-Feature Engineering
-   |
-   v
-Model Training
-   |
-   v
-Model Comparison
-   |
-   v
-Best Model + Reports + Visualizations
-```
+**The golden rule: no row is added or removed, and `sales` is never changed. Cleaning only adds columns.** The input has 3,000,888 rows × 6 columns; the output has 3,000,888 rows × 23 columns. Lags need a complete calendar for every series, and every store × family needs a forecast, so nothing is deleted — unusual rows get a **flag** instead.
 
-## Data Processing
+What it does:
 
-The first stage prepares the raw data for analysis and Machine Learning.
+1. **Stores:** joins city, state, store type and cluster on `store_nbr`. The store `type` column is renamed `store_type` so it does not clash with the holiday `type`.
+2. **Oil:** oil prices exist only on market days. Missing days get the **last known price carried forward** (Saturday gets Friday's price). This uses only the past; averaging Friday and Monday would use Monday's price, which is not known yet on Saturday. The very first day (2013-01-01) takes the first real price. A flag `oil_is_filled` marks filled days.
+3. **Holidays:** each holiday row becomes one category:
+   - `Holiday`, `Transfer`, `Additional`, `Bridge` → real day off;
+   - `Event` (Black Friday, Mother's Day, the 2016 earthquake …) → its own flag, not a day off;
+   - `Work Day` (a normally free day worked to make up for a bridge day) → its own flag;
+   - `transferred = True` → the holiday was **moved away** from that date, so that date is a **normal day**; the new date appears as type `Transfer`.
 
-### 1. Raw Data Inspection
+   National holidays apply to all stores, regional ones to stores in that state, local ones to stores in that city. Result: 7 calendar flags (`is_holiday`, `is_holiday_national`, `is_holiday_regional`, `is_holiday_local`, `is_event`, `is_earthquake`, `is_work_day`).
+4. **Quality-control (QC) flags**, computed only from data up to **2017-06-30** (the end of the training period, so nothing from validation or test leaks in):
 
-Script:
+   | Flag | Meaning | Share of rows |
+   |---|---|---|
+   | `qc_zero_series` | This store × family never sold anything (54 of 1,782 series) | 3.0% |
+   | `qc_before_first_sale` | Day before the series' first ever sale (store not opened yet, family not stocked yet) | 18.5% |
+   | `qc_store_closed_day` | The store sold nothing in any family that day | 8.1% |
+   | `qc_sales_outlier` | Sale above Q3 + 3 × IQR of its own series (flagged, **not** removed — these are real sales) | 0.6% |
 
-`src/inspect_data.py`
+   ⚠️ QC flags are built from the sales themselves, so they are **never used as model features** — only to filter rows.
+5. **Save:** sorted by store → family → date and written as Parquet (smaller and faster than CSV, keeps column types).
 
-This script examines the original CSV files before any cleaning takes place.
+Report with every decision: `reports/cleaning_report.md`.
 
-It checks:
+### 4.3 Validate — `src/validate_data.py`
 
-- Dataset dimensions.
-- Column names and data types.
-- Missing values.
-- Duplicate rows.
-- Date ranges.
-- Sales distributions.
-- Store and product information.
-- Data consistency.
+A second, independent check. It re-reads the raw files and recomputes everything (row counts, ids, unchanged sales, complete calendar grid, oil filling, holiday flags, QC flags) instead of trusting the cleaning code. Each check prints `PASS`, `WARN` or `FAIL`. The latest run has **0 FAIL** and one expected `WARN`: 1 January 2017 is not a holiday in the official file (it was transferred), even though stores were closed — `qc_store_closed_day` catches that day.
+Report: `reports/validation_report.txt`.
 
-The results are saved in:
+### 4.4 Explore the data — `src/eda.py`
 
-`reports/inspection_report.txt`
+Draws nine charts (`reports/eda/01_…png` to `09_…png`) and writes notes with numbers computed from the data (`reports/eda/eda_notes.md`). Main findings:
 
-### 2. Data Cleaning and Preparation
+- **Trend:** average daily sales doubled from 2013 to 2016 (+105%), partly because new stores opened.
+- **Weekly pattern:** weekends sell **+39%** vs Monday–Friday (Sunday best, Thursday weakest) → the weekday is a strong clue.
+- **Day of month:** paydays themselves add only about +1%, but the first days of each month are 7–17% above normal (people shop right after the end-of-month payday).
+- **Concentration:** the top 3 families (GROCERY I, BEVERAGES, PRODUCE) make 64% of all units; the 10 biggest stores make 40%.
+- **Promotions:** only recorded from 2014-04-01. Rows with a promotion sell 9.6× more on average, but most of that is because big families are promoted more often; inside the same store and family the typical boost is about 1.5×.
+- **Holidays:** national holidays about +15%; 1 January about −99% (stores closed).
+- **Earthquake (2016-04-16):** sales +16% in the two weeks after → a one-off, flagged with `is_earthquake`.
+- **Zeros:** 31% of rows have zero sales (BOOKS is zero on 97% of days).
 
-Script:
+### 4.5 Naive baseline — `notebooks/02_naive_baseline_yussuf.ipynb`
 
-`src/prepare_data.py`
+The simplest possible forecast: **"sales will be the same as on the same weekday three weeks earlier"** (lag 21). In forecasting books this is called a *seasonal naive* forecast. Nothing is trained. It is the **number every model must beat**.
 
-This stage combines the original datasets and creates cleaned datasets.
+- Why 21 and not 7: with a 16-day horizon, sales 7 days before the last forecast day are not known yet (leakage).
+- Why 21 and not 16: 16 lands on a different weekday. Copying from 16 days ago gives about **35%** WAPE on validation, copying from 21 days ago gives **17.5%**.
+- Lags are built by **matching dates** (date + 21 days), not by counting rows, because the missing 25 December would shift a row count by one day.
 
-#### Store information
+### 4.6 Features — `src/feature_engineering.py`
 
-The store metadata is joined using `store_nbr`.
+Turns the cleaned table into model-ready clues. All statistics and encodings are fitted on the training period only.
 
-It adds:
-
-- City.
-- State.
-- Store type.
-- Store cluster.
-
-The original `type` column is renamed to `store_type` to avoid confusion with holiday types.
-
-#### Oil price processing
-
-Oil prices are not available for every calendar day.
-
-The project:
-
-1. Creates a complete daily calendar.
-2. Carries the last known oil price forward.
-3. Fills leading missing values using the first available real price.
-4. Adds `oil_is_filled` to identify filled values.
-
-This preserves information about whether an oil price was observed or estimated.
-
-#### Holiday processing
-
-Holiday records are classified into different categories:
-
-- Real holidays.
-- Events.
-- Work days.
-- Transferred holidays.
-
-A transferred holiday is not treated as a day off on its original date.
-
-The project also distinguishes national, regional, and local holidays.
-
-#### Quality-control flags
-
-Instead of deleting unusual or zero-sales rows, the project creates quality-control flags:
-
-| Flag | Meaning |
+| Group | Features |
 |---|---|
-| `qc_zero_series` | The store/product series has never recorded a sale within the statistics window |
-| `qc_before_first_sale` | The date is before the first recorded sale |
-| `qc_store_closed_day` | The store recorded zero sales across all product families that day |
-| `qc_sales_outlier` | The sale exceeds the series-specific outlier threshold |
+| Calendar | `day_of_week`, `day_of_month`, `week_of_year`, `month`, `quarter`, `year`, `is_weekend`, `days_to_month_end`, `is_payday` |
+| Sales lags | `sales_lag_16`, `sales_lag_21`, `sales_lag_28` |
+| Rolling means (shifted by 16 days) | `sales_roll_7_mean`, `sales_roll_28_mean` |
+| Promotions (known in advance — stores plan them, and `test.csv` gives them) | `onpromotion`, `promo_lag_7`, `promo_roll_7_mean` |
+| Oil (lagged so they are known 16 days ahead) | `oil_lag_16`, `oil_lag_21`, `oil_lag_28` |
+| Holidays (the calendar is known in advance) | the 7 flags from step 4.2 |
+| Store and family | `store_nbr`, `cluster`, `store_type_enc`, `family_enc`, `city_enc`, `state_enc`, `store_family_mean_sales` (series average, delayed by 16 days) |
 
-Outliers are identified using the Interquartile Range (IQR) method:
+Lags and rolling means are computed **per store and family** and by **matching dates**, so the missing 25 December does not shift them.
+Report: `reports/feature_report.md`.
 
-\[
-Upper\ Limit = Q3 + 3 \times IQR
-\]
+### 4.7 Models and evaluation — `src/train_models.py`, `src/compare_models.py`
 
-These flags are retained for analysis and training filters. The original sales values are not removed or modified.
+Five models are compared on exactly the same days:
 
-### 3. Data Validation
+| Model | Owner | In plain words |
+|---|---|---|
+| Naive lag 21 | Yussuf | Copy the sales from three weeks ago. |
+| Linear Regression | Hazem | Draws the best straight-line relationship between the clues and sales. |
+| Polynomial Regression | Zenab | Like Linear, but the line may curve (adds squared and multiplied clues). Used on a few numeric clues only, so the number of columns does not explode. |
+| Random Forest | Adham | Many decision trees, each trained on a random part of the data, voting together. |
+| XGBoost | Sara | Trees built one after another, each fixing the mistakes of the previous ones. |
 
-Script:
+**Error scores** (lower is better). Example with actual = [100, 10, 0] and predicted = [90, 20, 5]:
 
-`src/validate_data.py`
+| Score | Formula | Example | Meaning |
+|---|---|---|---|
+| **MAE** | average of \|actual − predicted\| | (10 + 10 + 5) / 3 = 8.33 | "on average we are off by 8.33 units per row" |
+| **RMSE** | √(average of (actual − predicted)²) | √75 = 8.66 | like MAE, but big misses count much more |
+| **WAPE** (main score) | sum of \|actual − predicted\| ÷ sum of actual | 25 / 110 = 22.7% | "our total error is 22.7% of everything sold" |
 
-The validation stage independently checks the cleaned datasets against the original data.
+Why WAPE is the main score: it is a percentage a manager understands; big families (most of the units) count most; and it works with zero-sales rows. The common MAPE divides each row by its own sales and breaks on the 31% of rows with zero sales.
 
-It verifies:
+> **Status:** `train_models.py` and `compare_models.py` are first versions. They still use the old split (validation up to 2017-08-15, no test period) and the RMSLE score. They are being moved to the agreed split and to MAE / RMSE / WAPE, so their numbers are **not** final results yet.
 
-- Row counts.
-- Unique IDs.
-- Date consistency.
-- Store and product combinations.
-- Missing values.
-- Oil price filling.
-- Holiday flags.
-- Quality-control flags.
-- Test dataset structure.
+---
 
-The validation report uses three statuses:
+## 5. The rules the whole team follows
 
-- `PASS`: The check passed.
-- `WARN`: An unusual condition requires attention.
-- `FAIL`: A real validation problem was found.
-
-The latest saved validation report contains:
-
-| Result | Count |
-|---|---:|
-| PASS | 64 |
-| WARN | 1 |
-| FAIL | 0 |
-
-The report is available at:
-
-`reports/validation_report.txt`
-
-## Exploratory Data Analysis
-
-Script:
-
-`src/eda.py`
-
-Exploratory Data Analysis (EDA) means studying and visualizing the dataset before building predictive models.
-
-The project analyzes:
-
-1. Total sales over time.
-2. Average sales by weekday.
-3. Sales by day of the month.
-4. Sales by product family.
-5. Sales by store.
-6. Promotion behavior.
-7. Holidays and events.
-8. The 2016 earthquake period.
-9. Zero-sales behavior by product family.
-
-### Example: Total sales over time
-
-![Total Sales Over Time](reports/eda/01_total_sales_over_time.png)
-
-### Example: Sales by product family
-
-![Sales by Product Family](reports/eda/04_sales_by_family.png)
-
-### Example: Promotion analysis
-
-![Promotions](reports/eda/06_promotions.png)
-
-### Some observations
-
-The EDA report identifies several patterns:
-
-- Average daily sales increased substantially between 2013 and 2016.
-- Weekends recorded approximately 39% more sales than weekdays.
-- The three largest product families account for approximately 64% of total units sold.
-- The 10 largest stores account for approximately 40% of total sales.
-- Promotion information starts on 2014-04-01.
-- December 25 has no sales rows because stores are closed.
-
-The complete analysis is saved in:
-
-`reports/eda/eda_notes.md`
-
-## Feature Engineering
-
-Script:
-
-`src/feature_engineering.py`
-
-Feature engineering is the process of transforming raw information into useful variables that Machine Learning models can learn from.
-
-The project creates 38 model features divided into several groups.
-
-### 1. Calendar Features
-
-These features describe the date:
-
-- `day_of_week`
-- `day_of_month`
-- `week_of_year`
-- `month`
-- `quarter`
-- `year`
-- `is_weekend`
-- `days_to_month_end`
-- `is_payday`
-
-They help models learn weekly, monthly, and seasonal patterns.
-
-### 2. Sales Lag Features
-
-A lag feature represents a previous value of the target variable.
-
-For example:
-
-- `sales_lag_7`: Sales from 7 calendar days earlier.
-- `sales_lag_14`: Sales from 14 calendar days earlier.
-- `sales_lag_16`: Sales from 16 calendar days earlier.
-- `sales_lag_30`: Sales from 30 calendar days earlier.
-
-These features help the model understand historical demand.
-
-### 3. Rolling Statistics
-
-Rolling features summarize previous observations over a time window.
-
-Examples:
-
-- `sales_roll_7_mean`
-- `sales_roll_14_mean`
-- `sales_roll_30_mean`
-- `sales_roll_7_std`
-
-The rolling mean represents the average sales over the previous period.
-
-The rolling standard deviation represents how much sales fluctuate.
-
-The current day's sales are excluded from these calculations.
-
-### 4. Promotion Features
-
-Promotion-related features include:
-
-- `onpromotion`
-- `promo_lag_7`
-- `promo_roll_7_mean`
-
-They help the models understand the relationship between promotions and demand.
-
-### 5. Oil Features
-
-Oil-related features include:
-
-- `oil_price`
-- `oil_is_filled`
-- `oil_lag_7`
-- `oil_roll_7_mean`
-
-### 6. Categorical Encoding
-
-Machine Learning algorithms generally require numerical inputs.
-
-The project converts categorical variables into numerical representations:
-
-- `store_type_enc`
-- `family_enc`
-- `city_enc`
-- `state_enc`
-
-It also creates:
-
-`store_family_mean_sales`
-
-This feature represents historical sales behavior for each store/product-family combination.
-
-### Avoiding Data Leakage
-
-Data leakage occurs when a model receives information that would not have been available at prediction time.
-
-To reduce leakage:
-
-- Training statistics are calculated using the training period only.
-- Encodings are fitted using training data.
-- Historical sales features use previous dates only.
-- The train/validation split is chronological.
-- The validation period is never randomly shuffled into the training period.
-
-An important implementation detail is that lag features are calculated using actual calendar dates rather than relying on row positions. This handles missing December 25 records correctly.
-
-The generated feature report is available at:
-
-`reports/feature_report.md`
-
-## Model Training
-
-Script:
-
-`src/train_models.py`
-
-The project trains and compares three regression models.
-
-### 1. Linear Regression
-
-Linear Regression is a statistical model that estimates the relationship between input features and a numerical target.
-
-The project uses:
-
-- Median imputation for missing values.
-- StandardScaler for feature scaling.
-- LinearRegression as the estimator.
-
-It serves as a simple baseline model.
-
-### 2. Random Forest Regressor
-
-Random Forest is an ensemble learning algorithm that combines predictions from multiple decision trees.
-
-The configured model uses:
-
-| Parameter | Value |
-|---|---:|
-| `n_estimators` | 30 |
-| `max_depth` | 20 |
-| `min_samples_leaf` | 5 |
-| `max_features` | sqrt |
-| `random_state` | 42 |
-
-Median imputation is applied before training.
-
-### 3. XGBoost Regressor
-
-XGBoost is a gradient boosting algorithm that builds decision trees sequentially, with each new tree helping reduce previous prediction errors.
-
-The configured model uses:
-
-| Parameter | Value |
-|---|---:|
-| `n_estimators` | 1000 |
-| `learning_rate` | 0.05 |
-| `max_depth` | 7 |
-| `subsample` | 0.8 |
-| `colsample_bytree` | 0.8 |
-| `min_child_weight` | 10 |
-| `tree_method` | hist |
-| `random_state` | 42 |
-| `early_stopping_rounds` | 30 |
-
-The target is transformed using `log1p` during training, and predictions are converted back using `expm1`.
-
-### Training and Validation Split
-
-The project uses a chronological split rather than a random split.
-
-| Dataset | Date range |
+| Rule | Value |
 |---|---|
-| Training | Up to 2017-06-30 |
-| Validation | 2017-07-01 to 2017-08-15 |
+| Forecast horizon | 16 days |
+| Split by date, **never shuffled** | Train: up to 2017-06-30 · Validation: 2017-07-01 → 2017-07-30 · Test: 2017-07-31 → 2017-08-15 |
+| Test period | Used **once**, at the end, for the chosen model only |
+| Scores | MAE, RMSE, WAPE (WAPE is the main one) |
+| Lags | 16, 21, 28 days, per store and family |
+| Rolling means | 7 and 28 days, shifted by 16 days, per store and family |
+| No leakage | Nothing newer than 16 days before the forecast day; `transactions.csv` never used; QC flags never used as features |
+| MLflow | Every model run is logged: `sqlite:///mlflow.db`, experiment `stockwise-ai`, metrics named `val_mae`, `val_rmse`, `val_wape` (`test_…` for the final test score) |
+| GitHub | One branch per person; changes reach `main` only through a reviewed Pull Request |
 
-The training script excludes rows flagged as zero-sales series or before the first sale from the training window.
+Why a random split is wrong here: shuffling would put future days (e.g. 10 July) into training while the model is scored on earlier days (5 July). The model would learn from the future, which can never happen in real life.
 
-The validation period is kept separate from the training rows.
+---
 
-### MLflow Tracking
+## 6. Results so far
 
-The training script supports MLflow experiment tracking.
+**The number to beat — naive lag 21:**
 
-It can log:
+| | MAE | RMSE | WAPE |
+|---|---|---|---|
+| Validation (2017-07-01 → 07-30) | 85.54 | 318.98 | **17.50%** |
+| Test (2017-07-31 → 08-15) | 92.72 | 335.98 | **19.85%** |
 
-- Model names.
-- Evaluation metrics.
-- Training time.
-- Selected model parameters.
-- Feature importance information.
+*Read it as: "copying sales from three weeks ago, the total error is 17.5% of all units sold in July."* A model is only useful if its **validation WAPE is below 17.50%**. Saved in `reports/naive_baseline_metrics.csv`; chart in `reports/figures/naive_baseline_actual_vs_predicted.png`.
 
-To disable MLflow logging:
+Where the baseline fails (and what the real models should fix): it knows the weekday but not the day of the month (it guesses 22–26% too low on 1–2 August, right after payday) and not holidays (it guesses 18% too high on the weekend after the 11 August national holiday).
 
-```bash
-python src/train_models.py --no-mlflow
-```
+The results of Linear, Polynomial, Random Forest and XGBoost will be added here once they are scored with the agreed split and scores.
 
-## Model Evaluation
+---
 
-The main evaluation metric is **RMSLE — Root Mean Squared Logarithmic Error**.
-
-RMSLE measures the difference between the logarithms of actual and predicted values.
-
-\[
-RMSLE =
-\sqrt{
-\frac{1}{n}
-\sum_{i=1}^{n}
-\left(
-\log(1+\hat{y}_i)-\log(1+y_i)
-\right)^2
-}
-\]
-
-Where:
-
-- \(n\) is the number of observations.
-- \(y_i\) is the actual sales value.
-- \(\hat{y}_i\) is the predicted sales value.
-
-Lower RMSLE indicates better performance.
-
-Predictions are clipped to zero or greater because negative sales are not meaningful.
-
-## Results
-
-The following results are from the saved experiment in this repository.
-
-### Model Comparison
-
-| Model | Validation RMSLE | Training Time |
-|---|---:|---:|
-| Linear Regression | 1.39075 | 14.0 seconds |
-| Random Forest | 0.98715 | 61.5 seconds |
-| XGBoost | **0.40216** | 43.4 seconds |
-
-**XGBoost achieved the lowest validation RMSLE in this experiment.**
-
-![RMSLE Comparison](reports/figures/01_rmsle_comparison.png)
-
-### Speed vs Accuracy
-
-![Speed Accuracy Tradeoff](reports/figures/02_speed_accuracy_tradeoff.png)
-
-### Feature Importance
-
-The most important features for the saved XGBoost model were:
-
-| Rank | Feature | Importance |
-|---:|---|---:|
-| 1 | `sales_lag_7` | 0.4430 |
-| 2 | `sales_roll_7_mean` | 0.4089 |
-| 3 | `sales_roll_14_mean` | 0.0468 |
-| 4 | `sales_roll_30_mean` | 0.0316 |
-| 5 | `quarter` | 0.0104 |
-
-![Feature Importance](reports/figures/03_feature_importance_best.png)
-
-This indicates that recent historical sales patterns were particularly informative for the model.
-
-### Actual vs Predicted Sales
-
-![Actual vs Predicted](reports/figures/05_actual_vs_predicted.png)
-
-### Daily Forecast Comparison
-
-![Daily Forecast](reports/figures/08_daily_forecast.png)
-
-All comparison charts are available in:
-
-`reports/figures/`
-
-The complete experiment report is available in:
-
-`reports/model_comparison.md`
-
-## Project Structure
+## 7. Project structure
 
 ```text
 stockwise-ai/
-│
 ├── data/
-│   ├── raw/                       # Original Kaggle CSV files
-│   └── processed/                 # Generated cleaned and feature datasets
-│
-├── models/
-│   └── best_model.pkl             # Saved best trained model
-│
+│   ├── raw/                  ← you put the Kaggle CSV files here (not in Git)
+│   └── processed/            ← created by the scripts (not in Git)
+├── docs/version_1/           ← project documents: requirements, planning, literature review
+├── models/                   ← saved trained models, created by train_models.py (not in Git)
+├── notebooks/
+│   └── 02_naive_baseline_yussuf.ipynb
 ├── reports/
-│   ├── eda/
-│   │   ├── eda_notes.md
-│   │   └── *.png                  # EDA visualizations
-│   │
-│   ├── figures/
-│   │   └── *.png                  # Model comparison charts
-│   │
 │   ├── inspection_report.txt
 │   ├── cleaning_report.md
 │   ├── validation_report.txt
 │   ├── feature_report.md
-│   ├── model_comparison.md
-│   ├── model_comparison_metadata.json
-│   ├── model_comparison_results.parquet
-│   └── best_model_predictions.parquet
-│
+│   ├── naive_baseline_metrics.csv
+│   ├── eda/                  ← 9 EDA charts + eda_notes.md
+│   └── figures/              ← model charts
 ├── src/
-│   ├── config.py                  # Central project configuration
-│   ├── data_io.py                 # Shared data loading and report utilities
-│   ├── inspect_data.py            # Raw data inspection
-│   ├── validate_data.py           # Data validation
-│   ├── prepare_data.py            # Data cleaning and preparation
-│   ├── eda.py                     # Exploratory data analysis
-│   ├── feature_engineering.py     # Feature generation
-│   ├── train_models.py            # Model training and evaluation
-│   └── compare_models.py          # Model comparison and reporting
-│
-├── .gitignore
-├── requirements.txt
+│   ├── config.py             ← all paths, split dates and cleaning rules (one place)
+│   ├── data_io.py            ← shared helpers (reading files, writing reports)
+│   ├── inspect_data.py       ← step 1
+│   ├── prepare_data.py       ← step 2 (also runs step 3)
+│   ├── validate_data.py      ← step 3
+│   ├── eda.py                ← step 4
+│   ├── feature_engineering.py← step 6
+│   ├── train_models.py       ← step 7 (training)
+│   └── compare_models.py     ← step 7 (comparison report and charts)
+├── requirements.txt          ← exact library versions
 └── README.md
 ```
 
-**Note:** `data/raw/` and `data/processed/` are local directories. Their contents are not committed to this repository.
+---
 
-## Installation
+## 8. Installation
 
-### Requirements
+### What you need
 
-- Python 3.10 or newer.
-- pip.
-- Git.
-- The original Kaggle dataset.
+- **Python 3.12** (tested with 3.12.3). Check with `python --version` (on some systems `python3 --version`).
+- **Git**.
+- About **8 GB of RAM** and **2 GB of free disk space** (the data has 3 million rows).
+- A free **Kaggle account** to download the data.
 
-### 1. Clone the repository
+### Step 1 — Get the code
 
 ```bash
 git clone https://github.com/YussufAkram15/stockwise-ai.git
 cd stockwise-ai
 ```
 
-### 2. Create a virtual environment
+### Step 2 — Create a virtual environment
 
-Windows:
+A virtual environment is a private folder of libraries for this project, so it does not interfere with other Python projects on your computer.
+
+Linux / macOS:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
-Linux / macOS:
+> If PowerShell refuses to run the script, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use Command Prompt with `.venv\Scripts\activate.bat`.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
+When it works, your terminal line starts with `(.venv)`. Activate it again every time you open a new terminal.
 
-### 3. Install dependencies
+### Step 3 — Install the libraries
 
 ```bash
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-pip install pyarrow
 ```
 
-`pyarrow` is required for reading and writing Parquet files.
+The versions are pinned (exact numbers) so everyone gets the same results.
 
-### 4. Download the dataset
+### Step 4 — Download the data
 
-Download the competition files from Kaggle and place them inside:
+1. Open <https://www.kaggle.com/competitions/store-sales-time-series-forecasting/data> and log in.
+2. Click **"Late Submission"** or **"I Understand and Accept"** to accept the competition rules (otherwise the download is blocked).
+3. Click **"Download All"** and unzip the file.
+4. Put the CSV files in `data/raw/`:
 
 ```text
-data/raw/
+data/raw/train.csv
+data/raw/test.csv
+data/raw/stores.csv
+data/raw/oil.csv
+data/raw/holidays_events.csv
+data/raw/transactions.csv
+data/raw/sample_submission.csv
 ```
 
-At minimum, the cleaning pipeline requires:
+The cleaning needs at least `train.csv`, `stores.csv`, `oil.csv` and `holidays_events.csv`; `test.csv` is optional.
 
-- `train.csv`
-- `stores.csv`
-- `oil.csv`
-- `holidays_events.csv`
+---
 
-The test file is optional for the cleaning and feature-engineering stages, but is needed to generate test features.
+## 9. How to run the project
 
-## How to Run the Project
+Run every command **from the project folder** (`stockwise-ai/`) with the virtual environment active. Run the steps in this order; each step needs the files made by the step before.
 
-Run every command from the project root directory.
-
-### Step 1 — Inspect the raw data
+**Step 1 — Look at the raw files** (changes nothing):
 
 ```bash
 python src/inspect_data.py
 ```
 
-### Step 2 — Clean and prepare the data
+**Step 2 — Clean the data and validate it:**
 
 ```bash
 python src/prepare_data.py
 ```
 
-This script also runs the validation checks automatically at the end.
+Writes `data/processed/train_clean.parquet` (and `test_clean.parquet`), then runs the validation automatically. It must end with **0 FAIL**. Options: `--csv` also writes a CSV copy; `--skip-validation` skips the checks. To run the checks alone: `python src/validate_data.py`.
 
-### Step 3 — Run validation separately (optional)
-
-```bash
-python src/validate_data.py
-```
-
-### Step 4 — Perform exploratory data analysis
+**Step 3 — Draw the EDA charts:**
 
 ```bash
 python src/eda.py
 ```
 
-### Step 5 — Generate Machine Learning features
+**Step 4 — Naive baseline:** open `notebooks/02_naive_baseline_yussuf.ipynb` and run all cells. It only needs `data/raw/train.csv`. Two ways to open it:
+
+- **VS Code** with the *Python* and *Jupyter* extensions: open the file, pick the `.venv` interpreter as kernel, click **Run All**.
+- **In the browser:** `pip install notebook`, then `jupyter notebook notebooks/02_naive_baseline_yussuf.ipynb`.
+
+**Step 5 — Build the features:**
 
 ```bash
 python src/feature_engineering.py
 ```
 
-To skip test-set feature generation:
+Writes `data/processed/train_features.parquet` and `reports/feature_report.md`. Add `--no-test` to skip the Kaggle test period.
 
-```bash
-python src/feature_engineering.py --no-test
-```
-
-### Step 6 — Train the models
+**Step 6 — Train and compare the models** (first versions, see section 4.7):
 
 ```bash
 python src/train_models.py
-```
-
-By default, all three models are trained.
-
-To train only XGBoost:
-
-```bash
-python src/train_models.py --models xgb
-```
-
-To train Linear Regression and Random Forest:
-
-```bash
-python src/train_models.py --models lr rf
-```
-
-To disable MLflow:
-
-```bash
-python src/train_models.py --no-mlflow
-```
-
-### Step 7 — Compare the models
-
-```bash
 python src/compare_models.py
 ```
 
-This script reads the saved training results. It does not train the models again.
+Options: `--models lr rf xgb` trains only some models (lr = Linear, rf = Random Forest, xgb = XGBoost); `--no-mlflow` skips the logbook.
 
-It generates the comparison report and visualizations.
+**Step 7 — Open the experiment logbook (MLflow):**
 
-## Generated Outputs
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
 
-After running the pipeline, the main outputs include:
-
-| Output | Purpose |
-|---|---|
-| `train_clean.parquet` | Cleaned historical training data |
-| `test_clean.parquet` | Cleaned Kaggle test data |
-| `train_features.parquet` | Training and validation features |
-| `test_features.parquet` | Test features |
-| `best_model.pkl` | Saved best model and feature information |
-| `model_comparison_results.parquet` | Predictions from the trained models |
-| `model_comparison_metadata.json` | Model metrics and experiment metadata |
-| `best_model_predictions.parquet` | Best model validation predictions |
-| `model_comparison.md` | Generated model comparison report |
-
-The cleaned and feature-engineered datasets are generated locally and are not included in Git.
-
-## Important Technical Decisions
-
-A few design decisions are particularly important in this project.
-
-**1. Time-based splitting**
-
-Time-series data must preserve chronological order. Randomly shuffling historical observations can allow information from future dates to influence training.
-
-**2. Date-based lag calculation**
-
-December 25 is absent from the original data in every year. Therefore, row-position-based shifts can produce incorrect calendar lags. StockWise AI calculates lags using actual dates.
-
-**3. No deletion of outliers**
-
-Unusually high sales may be genuine demand caused by promotions or special events. The project flags these observations instead of automatically deleting them.
-
-**4. Avoiding future information**
-
-Historical statistics and encodings are calculated using the training period. The transaction table is intentionally not merged because it does not provide the same information for future test dates.
-
-**5. Centralized configuration**
-
-File paths, split dates, cleaning rules, and model artifact locations are defined in:
-
-`src/config.py`
-
-This keeps project settings consistent across scripts.
-
-## Current Limitations
-
-This repository currently focuses on the offline Machine Learning pipeline.
-
-There are several important limitations to keep in mind:
-
-- The validation period is also supplied to XGBoost for early stopping. Therefore, the reported validation score should not be treated as an independent, unbiased final test score.
-- The saved model is selected using validation performance.
-- Test features can be generated, but a dedicated final test-prediction and Kaggle submission-generation script is not included yet.
-- The current project is not deployed as a production API or web application.
-- Training times depend on the machine and environment.
-
-These are potential directions for future development.
-
-## Technologies Used
-
-| Technology | Purpose |
-|---|---|
-| Python | Main programming language |
-| Pandas | Data manipulation and processing |
-| NumPy | Numerical operations |
-| Scikit-learn | Preprocessing, pipelines, and regression models |
-| XGBoost | Gradient boosting model |
-| Matplotlib | Data visualization |
-| Seaborn | Statistical visualization |
-| PyArrow | Parquet file support |
-| Joblib | Model serialization |
-| MLflow | Experiment tracking |
-| Git & GitHub | Version control and project collaboration |
+Open the link it prints (usually <http://127.0.0.1:5000>). `mlflow.db` is created on your computer the first time a run is logged; it is not shared through Git.
 
 ---
 
-## Future Improvements
+## 10. What each step produces
 
-Possible next steps include:
+| Step | File | What it is |
+|---|---|---|
+| 1 | `reports/inspection_report.txt` | Facts about the raw files |
+| 2 | `data/processed/train_clean.parquet` | Cleaned data: 3,000,888 rows × 23 columns (not in Git) |
+| 2 | `data/processed/test_clean.parquet` | The Kaggle test period, enriched the same way (not in Git) |
+| 2 | `reports/cleaning_report.md` | Every cleaning decision and a dictionary of all 23 columns |
+| 3 | `reports/validation_report.txt` | All PASS / WARN / FAIL checks |
+| 4 | `reports/eda/*.png`, `reports/eda/eda_notes.md` | 9 charts and the findings |
+| 4 (baseline) | `reports/naive_baseline_metrics.csv`, `reports/figures/naive_baseline_actual_vs_predicted.png` | The number to beat |
+| 5 | `data/processed/train_features.parquet`, `reports/feature_report.md` | The feature table and its summary |
+| 6 | `models/best_model.pkl`, `reports/model_comparison.md`, `reports/figures/0*_*.png` | Trained model and comparison (re-created on each run, not in Git) |
 
-- Add a dedicated test prediction pipeline.
-- Generate a Kaggle submission file.
-- Introduce a final untouched holdout period.
-- Perform hyperparameter optimization.
-- Add automated pipeline tests.
-- Improve experiment tracking and model reproducibility.
-- Build a prediction API or interactive application.
+Generated data and models are **not** committed: anyone can re-create them by running the steps above.
 
 ---
 
-**StockWise AI** — Turning historical retail data into useful sales forecasts.
+## 11. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `train_clean.parquet not found` | Run step 2 (`python src/prepare_data.py`) first. |
+| `FileNotFoundError: data/raw/train.csv` | The CSV files are not in `data/raw/`, or you are not in the project folder. Run `cd stockwise-ai`. |
+| `ModuleNotFoundError` (e.g. `pandas`, `pyarrow`) | The virtual environment is not active, or step 3 of the installation was skipped. Activate `.venv` and run `pip install -r requirements.txt`. |
+| `pip` cannot find a version | Your Python is too old. Use Python 3.12. |
+| The computer freezes or `MemoryError` | The data needs about 8 GB of RAM. Close other programs; run one step at a time. |
+| Kaggle download says "rules not accepted" | Accept the competition rules on the Kaggle page first (installation step 4). |
+| `mlflow ui` shows no runs | Start it from the project folder, where `mlflow.db` is, and run the baseline notebook at least once. |
+
+---
+
+## 12. Team and status
+
+| Member | Part | Model |
+|---|---|---|
+| Yussuf (team lead) | Repository, naive baseline, integration, final pipeline | Naive lag 21 |
+| Hazem | Exploratory data analysis (EDA) | Linear Regression |
+| Zenab | Data cleaning, README | Polynomial Regression |
+| Adham | Feature engineering | Random Forest |
+| Sara | Split, scores, MLflow, model comparison, error analysis | XGBoost |
+
+**Status (17 November 2026):**
+
+| Step | Owner | Status |
+|---|---|---|
+| Inspection, cleaning, validation | Zenab | ✅ Done |
+| EDA charts and notes | Hazem | ✅ A version is in the repository (`src/eda.py`); Hazem's own version is not yet |
+| Naive baseline | Yussuf | ✅ Done, logged in MLflow as `naive_lag21` |
+| Feature engineering | Adham | ✅ Done (lags 16/21/28, rolling 7/28 shifted by 16); leakage check with Sara still to do |
+| Split, scores and MLflow helpers | Sara | ⏳ Not yet — `src/config.py` still has the old split |
+| Linear, Random Forest, XGBoost | Hazem, Adham, Sara | 🟡 First versions in `src/train_models.py`; must move to the agreed split and scores |
+| Polynomial Regression | Zenab | ⏳ Not yet |
+| Model comparison, error analysis, final test score | Sara, Yussuf | ⏳ Not yet |
+
+---
+
+## 13. Limitations and next steps
+
+**Now (Level 1, the graded core):**
+
+- Move all models to the agreed split and to MAE / RMSE / WAPE, and log them in MLflow.
+- Add Polynomial Regression.
+- XGBoost's early stopping currently looks at the validation period it is scored on; it should use the end of the training period instead.
+- Compare all five models, study where the best one is wrong (by date, store, family, holidays), then score the test period **once**.
+- Join every step into one pipeline that runs from the raw files to the comparison table.
+
+**Later (only after Level 1 is finished):**
+
+- Level 2 — turn forecasts into reorder advice (safety stock, reorder point, "reorder / OK / overstock").
+- Level 3 — a simple dashboard with an AI assistant that answers questions from our outputs.
+- Level 4 — deployment on the cloud.
+
+---
+
+## 14. Technologies used
+
+| Technology | Used for |
+|---|---|
+| Python 3.12 | Everything |
+| pandas, NumPy | Loading, merging and transforming the data |
+| PyArrow | Reading and writing Parquet files |
+| Matplotlib, seaborn | Charts |
+| scikit-learn | Linear / Polynomial Regression, Random Forest, pipelines, scaling |
+| XGBoost | Gradient-boosted trees |
+| MLflow | Experiment logbook |
+| Jupyter | The baseline notebook |
+| Git and GitHub | Version control and team review |

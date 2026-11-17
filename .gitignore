@@ -222,6 +222,8 @@ data/raw/
 mlruns/
 .env
 
+.venv/
+
 # Local generated data and archives
 data/processed/
 data/*.zip
@@ -230,3 +232,7 @@ data/*.zip
 mlflow.db
 mlflow.db-shm
 mlflow.db-wal
+
+# Generated model outputs (re-create them by running the scripts)
+models/
+reports/*.parquet

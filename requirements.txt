@@ -1,8 +1,21 @@
-pandas
-numpy
-matplotlib
-seaborn
-scikit-learn
-xgboost
-mlflow
-pyarrow 
+# Exact versions, so everyone on the team gets the same results (requirement NFR-02).
+# Install with:  pip install -r requirements.txt
+
+# Data
+pandas==3.1.1
+numpy==2.5.4
+pyarrow==26.0.1        # reads/writes the cleaned .parquet files (needed by src/prepare_data.py)
+
+# Charts
+matplotlib==3.11.2
+seaborn==0.13.2
+
+# Models
+scikit-learn==1.9.1
+xgboost==3.4.1
+
+# Experiment logbook
+mlflow==3.18.0
+
+# Running the notebooks
+ipykernel==7.4.0
