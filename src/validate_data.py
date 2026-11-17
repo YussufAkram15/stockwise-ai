@@ -6,7 +6,7 @@ Run from the project root:   python src/validate_data.py
 It re-reads the RAW files and the CLEANED files and checks, one by one, that nothing
 was lost, changed or leaked. Every line is PASS / FAIL / WARN:
   FAIL = a real problem (exit code 1)      WARN = unusual, please read it
-The result is printed and saved to data/reports/validation_report.txt
+The result is printed and saved to reports/validation_report.txt
 """
 from __future__ import annotations
 

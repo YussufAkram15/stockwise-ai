@@ -1,7 +1,7 @@
 """STEP 1 (Zenab): look at the raw files BEFORE cleaning anything.
 
 Run from the project root:   python src/inspect_data.py
-Nothing is modified. The result is printed and saved to data/reports/inspection_report.txt
+Nothing is modified. The result is printed and saved to reports/inspection_report.txt
 """
 from __future__ import annotations
 
