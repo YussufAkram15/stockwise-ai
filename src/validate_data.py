@@ -211,6 +211,36 @@ def validate_train(c: Checker, rep: Report) -> pd.DataFrame | None:
     share = clean["qc_sales_outlier"].mean()
     c.check("outlier share is small (< 5%)", share < 0.05, f"{share:.2%}", level="WARN")
 
+    # --- outliers and suspected data errors, recomputed independently ---
+    nz = win.loc[win["sales"] > 0]
+    qq = nz.groupby(key)["sales"].quantile([0.25, 0.75]).unstack()
+    qq.columns = ["q1", "q3"]
+    qq["n"] = nz.groupby(key).size()
+    qq = qq[qq["n"] >= config.OUTLIER_MIN_NONZERO_DAYS].reset_index()
+    qq["lim3"] = qq["q3"] + config.OUTLIER_IQR_MULT * (qq["q3"] - qq["q1"])
+    qq["lim10"] = qq["q3"] + config.OUTLIER_SUSPECT_MULT * (qq["q3"] - qq["q1"])
+    t = clean[key + ["sales", "sales_capped", "onpromotion", "is_holiday", "is_event", "is_earthquake",
+                     "qc_sales_outlier", "qc_sales_suspect"]].merge(qq[key + ["lim3", "lim10"]], on=key, how="left")
+    explained = ((t["is_holiday"] == 1) | (t["is_event"] == 1) | (t["is_earthquake"] == 1) | (t["onpromotion"] > 0))
+    exp_out = (t["sales"] > t["lim3"]).to_numpy()
+    exp_sus = ((t["sales"] > t["lim10"]) & ~explained).to_numpy()
+    is_sus = t["qc_sales_suspect"].to_numpy().astype(bool)
+    c.check("qc_sales_outlier = sales above Q3 + 3 x IQR (recomputed independently)",
+            np.array_equal(exp_out, t["qc_sales_outlier"].to_numpy().astype(bool)), f"{int(exp_out.sum()):,} rows")
+    c.check("qc_sales_suspect = extremely high AND unexplained (recomputed independently)",
+            np.array_equal(exp_sus, is_sus), f"{int(exp_sus.sum()):,} rows")
+    c.check("suspect rows are NEVER on a holiday, event, earthquake or promotion day", not bool((is_sus & explained.to_numpy()).any()))
+    cap_all = bool(getattr(config, "CAP_ALL_OUTLIERS_IN_HISTORY", False))
+    cap_rows = t["qc_sales_outlier"].to_numpy().astype(bool) if cap_all else is_sus
+    c.check("sales_capped is identical to sales on every row that is not capped",
+            np.array_equal(t.loc[~cap_rows, "sales_capped"].to_numpy(), t.loc[~cap_rows, "sales"].to_numpy()),
+            "mode: cap ALL outliers" if cap_all else "mode: cap suspected data errors only")
+    if cap_rows.any():
+        c.check("on capped rows sales_capped is the normal outlier limit (below the real sales)",
+                bool(np.allclose(t.loc[cap_rows, "sales_capped"].to_numpy(), t.loc[cap_rows, "lim3"].to_numpy())
+                     and (t.loc[cap_rows, "sales_capped"] < t.loc[cap_rows, "sales"]).all()))
+    c.check("suspect share is tiny (< 0.5% of rows)", is_sus.mean() < 0.005, f"{is_sus.mean():.3%} = {int(is_sus.sum()):,} rows", level="WARN")
+
     rep.section("I. Fingerprint of the official Kaggle files (WARN only)")
     e = config.EXPECTED
     c.check("rows = 3,000,888", len(clean) == e["train_rows"], f"{len(clean):,}", level="WARN")

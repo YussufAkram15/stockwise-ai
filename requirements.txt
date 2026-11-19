@@ -19,3 +19,4 @@ mlflow==3.18.0
 
 # Running the notebooks
 ipykernel==7.4.0
+joblib
