@@ -143,7 +143,7 @@ One model with the same columns is used for all 16 days, so a clue must exist fo
  9. Compare + error analysis .......... src/final_comparison.py, src/residual_analysis.py
         │
         ▼
-10. Score the best model on the test period once (to do)
+10. Score the best model on the test period once  src/test_best_model.py
 ```
 
 Steps 2 → 9 run with **one command**: `python src/run_pipeline.py` (see section 9).
@@ -345,7 +345,18 @@ What this says:
 - **Trees beat straight lines**: sales depend on combinations (this family, in this store, on a weekend, with a promotion), which trees capture and a single straight line cannot. Linear Regression does not even beat the baseline.
 - **Where it is still wrong**: 84% of the error comes from the biggest 25% of series (BEVERAGES, GROCERY I, CLEANING); holidays are harder (WAPE 19.9% vs 12.7% on normal days); the largest single misses are sudden one-day jumps (e.g. store 30 CLEANING sold 10,392 on 2017-07-10 against a usual few hundred).
 
-The test score of the best model (used once) will be added here.
+**Final test score — the honest number** (`reports/test_result.md`):
+
+Random Forest was chosen on validation, retrained on everything up to 2017-07-30 (training + validation, as a shop standing on 30 July would do), then scored **once** on the 16 test days it had never seen (2017-07-31 → 08-15):
+
+| | MAE | RMSE | WAPE |
+|---|---|---|---|
+| **Random Forest, test** | **74.14** | **255.33** | **15.87%** |
+| Naive lag 21, test | 92.72 | 335.98 | 19.85% |
+
+*Read it as: "on 16 days the model never saw, its total error is 15.9% of all units sold — 20% less error than copying the past."*
+
+The test period is harder than validation for **every** model (the baseline also goes from 17.50% to 19.85%): it contains the start-of-month payday days (1–2 August) and the national holiday of 10–11 August, which are harder to forecast than the normal July days used for validation.
 
 ---
 
@@ -382,6 +393,7 @@ stockwise-ai/
 │   ├── final_comparison.py   ← step 9 (one table for all models + charts)
 │   ├── residual_analysis.py  ← step 9 (where the best model is wrong)
 │   ├── run_pipeline.py       ← runs steps 2 → 9 with one command
+│   ├── test_best_model.py    ← step 10 (the best model on the test period, once)
 │   ├── forecast_best_model.py← Level 2: 16-day forecast with the best model
 │   ├── forecast_naive.py     ← Level 2: the same files with the naive baseline
 │   └── inventory.py          ← Level 2: reorder advice per store × family
@@ -520,7 +532,15 @@ python src/residual_analysis.py
 
 Options for `train_models.py`: `--models lr rf xgb` trains only some models (lr = Linear, rf = Random Forest, xgb = XGBoost); `--no-mlflow` skips the logbook. `residual_analysis.py --no-shap` skips the SHAP charts (they need `pip install shap`).
 
-**Step 7 — Level 2, the reorder advice** (after the models are trained):
+**Step 7 — The final test score** (only once, after the best model is chosen):
+
+```bash
+python src/test_best_model.py
+```
+
+It retrains the best model on training + validation and scores the test period once. It refuses to run a second time (the test period must be looked at only once); use `--force` only if the model or the data changed.
+
+**Step 7b — Level 2, the reorder advice** (after the models are trained):
 
 ```bash
 python src/forecast_best_model.py
@@ -561,6 +581,7 @@ Open the link it prints (usually <http://127.0.0.1:5000>). `mlflow.db` is create
 | 6 | `models/best_model.pkl` | The best trained model (re-created on each run, not in Git) |
 | 6 | `reports/model_comparison.md`, `reports/model_comparison.csv`, `reports/figures/*.png` | One table for all models, plus charts |
 | 6 | `reports/residual_analysis.md`, `reports/figures/res_*.png` | Where the best model is wrong |
+| 7 | `reports/test_result.md`, `reports/test_result.json` | The final test score of the best model |
 
 Generated data and models are **not** committed: anyone can re-create them by running the steps above.
 
@@ -605,7 +626,7 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 | Linear, Random Forest, XGBoost | Hazem, Adham, Sara | ✅ Done — `src/train_models.py` (XGBoost early stopping on training data only) |
 | Polynomial Regression | Zenab | ✅ Done — `src/train_polynomial.py` |
 | Model comparison and error analysis | Sara, Zenab | ✅ Done — `src/final_comparison.py`, `src/residual_analysis.py` |
-| Final test score of the best model | Yussuf | ⏳ Not yet |
+| Final test score of the best model | Yussuf | ✅ Done — Random Forest, test WAPE 15.87% (baseline 19.85%), `src/test_best_model.py` |
 | Level 2 — reorder advice | Yussuf | ✅ Done — `src/forecast_best_model.py`, `src/inventory.py` (stock simulated) |
 | Level 3 — dashboard (without the AI assistant) | Yussuf | ✅ Done — `app/dashboard.py` |
 
@@ -615,7 +636,6 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 
 **Still to do:**
 
-- Score the best model (Random Forest) on the test period **once** and log it as `test_wape`.
 - The best model is trained on data up to 2017-06-30; for the real 16-day forecast it could be retrained on all data up to 2017-08-15.
 - Level 3 — the AI assistant (a ready-made LLM that answers questions by reading our output tables).
 - Level 4 — deployment on the cloud (Docker + AWS).
