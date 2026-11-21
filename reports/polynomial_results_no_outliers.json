@@ -1,0 +1,23 @@
+{
+  "params": {
+    "model": "PolynomialRegression_no_outliers",
+    "degree": 2,
+    "features": "sales_lag_16, sales_lag_21, sales_lag_28, sales_roll_7_mean, sales_roll_28_mean, onpromotion",
+    "n_features": 6,
+    "n_poly_columns": 27,
+    "pipeline": "SimpleImputer(median) > StandardScaler > PolynomialFeatures > LinearRegression",
+    "train_end": "2017-06-30",
+    "val_start": "2017-07-01",
+    "val_end": "2017-07-30",
+    "qc_filter_train": "qc_zero_series=0 and qc_before_first_sale=0 and qc_sales_outlier=0",
+    "exclude_outliers": true,
+    "n_train_rows": 2347200,
+    "n_val_rows": 53460
+  },
+  "metrics": {
+    "val_mae": 77.7156605707169,
+    "val_rmse": 250.9104221708349,
+    "val_wape": 15.902700486427792
+  },
+  "naive_baseline_wape": 17.5
+}

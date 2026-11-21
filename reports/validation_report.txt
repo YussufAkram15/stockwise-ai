@@ -7,7 +7,7 @@ STOCKWISE AI - VALIDATION OF THE CLEANED DATA
 A. Cleaned train file: structure
 ==============================================================================
 [PASS] train_clean.parquet exists   (train_clean.parquet)
-[PASS] columns are exactly the agreed schema (names and order)   (23 columns)
+[PASS] columns are exactly the agreed schema (names and order)   (25 columns)
 [PASS] date column is a real datetime
 [PASS] sales is numeric
 
@@ -84,6 +84,12 @@ H. Quality-control flags (zero series, first sale, closed store, outliers)
 [PASS] qc_store_closed_day = store sold nothing in any family   (241,890 rows)
 [PASS] outliers are real sales (> 0)
 [PASS] outlier share is small (< 5%)   (0.64%)
+[PASS] qc_sales_outlier = sales above Q3 + 3 x IQR (recomputed independently)   (19,078 rows)
+[PASS] qc_sales_suspect = extremely high AND unexplained (recomputed independently)   (1,954 rows)
+[PASS] suspect rows are NEVER on a holiday, event, earthquake or promotion day
+[PASS] sales_capped is identical to sales on every row that is not capped   (mode: cap suspected data errors only)
+[PASS] on capped rows sales_capped is the normal outlier limit (below the real sales)
+[PASS] suspect share is tiny (< 0.5% of rows)   (0.065% = 1,954 rows)
 
 ==============================================================================
 I. Fingerprint of the official Kaggle files (WARN only)
@@ -111,5 +117,5 @@ J. Cleaned test file (Kaggle test period)
 ==============================================================================
 FINAL RESULT
 ==============================================================================
-PASS = 64   WARN = 1   FAIL = 0
+PASS = 70   WARN = 1   FAIL = 0
 DATA IS CLEAN: all required checks passed.  (read the WARN lines above)

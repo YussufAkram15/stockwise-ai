@@ -3,7 +3,7 @@
 Re-run `python src/prepare_data.py` and this file is rewritten with the new numbers.
 
 ## 1. Result
-- `data/processed/train_clean.parquet`: **3,000,888 rows x 23 columns**, 2013-01-01 -> 2017-08-15, 54 stores x 33 families.
+- `data/processed/train_clean.parquet`: **3,000,888 rows x 25 columns**, 2013-01-01 -> 2017-08-15, 54 stores x 33 families.
 - **No row was added or removed and `sales` was not changed.** Cleaning only adds columns.
 - Sorted by `store_nbr`, `family`, `date`: each series is one block, oldest day first (safe for `groupby(...).shift()` and rolling windows).
 - `data/processed/test_clean.parquet`: 28,512 rows (Kaggle test period), same enrichment, original `id` order, no `sales` and no `qc_` columns.
@@ -47,6 +47,33 @@ Holidays treated as NORMAL days because they were transferred:
 - `qc_before_first_sale`: 18.45% of rows are before a series' first sale (store not opened / product not sold yet). Suggestion: exclude from training.
 - `qc_store_closed_day`: 8.06% of rows are days where the store sold nothing in any family.
 - `qc_sales_outlier`: 0.64% of rows are above Q3 + 3 x IQR of their own series (non-zero days). **Not removed or clipped**: they are real sales (promotions, big events).
+- `qc_sales_suspect`: **1,954 rows** (0.07% of rows) are SUSPECTED DATA ERRORS: above Q3 + 10 x IQR of their own series AND not on a holiday, event, earthquake or promotion day. Real peaks (promotions, holidays, events) are never flagged here.
+  - **Decision:** `sales` is NEVER changed. Suspect rows are excluded from TRAINING, and in `sales_capped` they are capped at the normal outlier limit, so lags and rolling averages do not copy one bad day forward. Validation/test are scored on the real `sales`.
+  - Full list: `data/processed/suspect_sales_rows.csv`. Please look at the biggest ones and confirm they are really errors.
+
+| date | store | family | sales | normal limit | x limit |
+|---|---|---|---|---|---|
+| 2016-10-07 | 39 | MEATS | 89,576 | 311 | 287.6 |
+| 2015-12-04 | 24 | GROCERY II | 2,931 | 70 | 41.9 |
+| 2016-12-05 | 24 | GROCERY II | 2,797 | 70 | 40.0 |
+| 2013-12-05 | 24 | GROCERY II | 2,576 | 70 | 36.8 |
+| 2013-12-09 | 26 | LIQUOR,WINE,BEER | 3,939 | 131 | 30.1 |
+| 2015-12-17 | 30 | FROZEN FOODS | 3,717 | 133 | 27.8 |
+| 2015-10-03 | 43 | POULTRY | 12,143 | 449 | 27.0 |
+| 2014-10-27 | 1 | CELEBRATION | 1,306 | 57 | 22.9 |
+| 2014-12-12 | 26 | LIQUOR,WINE,BEER | 2,993 | 131 | 22.8 |
+| 2013-12-18 | 30 | FROZEN FOODS | 3,011 | 133 | 22.6 |
+| 2015-11-09 | 22 | MEATS | 4,776 | 221 | 21.6 |
+| 2013-12-10 | 26 | FROZEN FOODS | 2,666 | 133 | 20.0 |
+| 2015-12-15 | 1 | FROZEN FOODS | 5,609 | 303 | 18.5 |
+| 2016-08-17 | 39 | MEATS | 5,475 | 311 | 17.6 |
+| 2014-09-06 | 48 | SCHOOL AND OFFICE SUPPLIES | 608 | 35 | 17.4 |
+| 2015-11-01 | 40 | LAWN AND GARDEN | 17 | 1 | 17.0 |
+| 2016-08-05 | 39 | MEATS | 5,178 | 311 | 16.6 |
+| 2016-05-31 | 39 | MEATS | 5,168 | 311 | 16.6 |
+| 2016-07-13 | 39 | MEATS | 5,137 | 311 | 16.5 |
+| 2016-08-26 | 39 | MEATS | 4,989 | 311 | 16.0 |
+
 - **IMPORTANT: `qc_` columns are built from sales, so they are NOT available for the future. Use them only to filter/inspect rows. NEVER use them as model features.**
 
 ## 3. Things the next person must know
@@ -64,6 +91,7 @@ Holidays treated as NORMAL days because they were transferred:
 | `store_nbr` | Store number (1-54). |
 | `family` | Product family (33 families). |
 | `sales` | Units sold that day by that store for that family. NOT modified by cleaning. |
+| `sales_capped` | Same as sales, except suspected data errors are capped at the normal outlier limit. Use it to build lags / rolling means. `sales` itself is never changed. |
 | `onpromotion` | Number of items of that family on promotion that day in that store. |
 | `city` | Store city (from stores.csv). |
 | `state` | Store state (from stores.csv). |
@@ -82,3 +110,4 @@ Holidays treated as NORMAL days because they were transferred:
 | `qc_before_first_sale` | QC FLAG: day is before the first sale of that series (not opened / not sold yet), up to the cutoff. |
 | `qc_store_closed_day` | QC FLAG: the store sold nothing in ANY family that day (closed or not open yet). |
 | `qc_sales_outlier` | QC FLAG: sale is above Q3 + k*IQR of its own series (limit learned before the cutoff). |
+| `qc_sales_suspect` | QC FLAG: extremely high sale (> Q3 + 10 x IQR of its series) that no holiday, event, earthquake or promotion explains. Left out of TRAINING. Never a model feature. |

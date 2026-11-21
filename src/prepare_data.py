@@ -9,7 +9,7 @@ What it does (every decision is also written to reports/cleaning_report.md):
   2. merge stores.csv and oil.csv into the sales rows
   3. fill missing oil prices (carry the last known price forward)
   4. sort out holidays (transferred holidays are normal days; events are separate)
-  5. flag zero-sales series, closed stores and outliers (flagged, NEVER deleted)
+  5. flag zero-sales series, closed stores, outliers and suspected data errors (flagged, NEVER deleted)
   6. save data/processed/train_clean.parquet (+ test_clean.parquet)
 """
 from __future__ import annotations
@@ -220,7 +220,7 @@ def enrich(df: pd.DataFrame, stores: pd.DataFrame, oil_daily: pd.DataFrame, cale
 # ----------------------------------------------------------------------------
 # Step 5: zero series, closed stores, outliers  (FLAGGED, never deleted)
 # ----------------------------------------------------------------------------
-def add_qc_flags(train: pd.DataFrame, cutoff: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+def add_qc_flags(train: pd.DataFrame, cutoff: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     key = ["store_nbr", "family"]
     cutoff_ts = pd.Timestamp(cutoff)
     train = train.sort_values(key + ["date"], kind="mergesort").reset_index(drop=True)
@@ -247,9 +247,11 @@ def add_qc_flags(train: pd.DataFrame, cutoff: str) -> tuple[pd.DataFrame, pd.Dat
     summary["qc_zero_series"] = (summary["total_sales"] == 0).astype("int8")
     limit = summary["q3"] + config.OUTLIER_IQR_MULT * (summary["q3"] - summary["q1"])
     summary["outlier_limit"] = limit.where(summary["n_nonzero_days"] >= config.OUTLIER_MIN_NONZERO_DAYS)
+    extreme = summary["q3"] + config.OUTLIER_SUSPECT_MULT * (summary["q3"] - summary["q1"])
+    summary["suspect_limit"] = extreme.where(summary["n_nonzero_days"] >= config.OUTLIER_MIN_NONZERO_DAYS)
     summary = summary.reset_index()
 
-    helper = summary[key + ["first_sale_date", "qc_zero_series", "outlier_limit"]]
+    helper = summary[key + ["first_sale_date", "qc_zero_series", "outlier_limit", "suspect_limit"]]
     train = train.merge(helper, on=key, how="left", validate="many_to_one")
     train["qc_zero_series"] = train["qc_zero_series"].fillna(0).astype("int8")
 
@@ -266,7 +268,24 @@ def add_qc_flags(train: pd.DataFrame, cutoff: str) -> tuple[pd.DataFrame, pd.Dat
     # unusually high sale for its own series (NaN limit -> False -> 0)
     train["qc_sales_outlier"] = (train["sales"] > train["outlier_limit"]).astype("int8")
 
-    return train.drop(columns=["first_sale_date", "outlier_limit"]), summary
+    # SUSPECTED DATA ERROR = extremely high (> Q3 + 10 x IQR of its own series) AND nothing we know explains it
+    # (no holiday, no event, no earthquake, no promotion). Real peaks are never touched.
+    explained = ((train["is_holiday"] == 1) | (train["is_event"] == 1)
+                 | (train["is_earthquake"] == 1) | (train["onpromotion"] > 0))
+    train["qc_sales_suspect"] = ((train["sales"] > train["suspect_limit"]) & ~explained).astype("int8")
+    # `sales` stays exactly as in train.csv. `sales_capped` is the same, except suspect rows are capped at the
+    # normal outlier limit; it is meant for building lags / rolling averages so one bad day is not copied forward.
+    # Switch in config.py: CAP_ALL_OUTLIERS_IN_HISTORY = True also caps the REAL peaks in `sales_capped`
+    # (stops one real peak from echoing into the lags 16/21/28 days later). Default False = real peaks untouched.
+    cap_rows = (train["qc_sales_outlier"] == 1) if getattr(config, "CAP_ALL_OUTLIERS_IN_HISTORY", False) \
+        else (train["qc_sales_suspect"] == 1)
+    train["sales_capped"] = np.where(cap_rows, np.minimum(train["sales"], train["outlier_limit"]), train["sales"])
+    suspects = train.loc[train["qc_sales_suspect"] == 1,
+                         ["date", "store_nbr", "family", "sales", "outlier_limit", "suspect_limit"]].copy()
+    suspects["times_normal_limit"] = suspects["sales"] / suspects["outlier_limit"]
+    suspects = suspects.sort_values("times_normal_limit", ascending=False).reset_index(drop=True)
+
+    return train.drop(columns=["first_sale_date", "outlier_limit", "suspect_limit"]), summary, suspects
 
 
 # ----------------------------------------------------------------------------
@@ -339,6 +358,20 @@ def write_cleaning_report(ctx: dict) -> None:
     add(f"- `qc_store_closed_day`: {pct(tr['qc_store_closed_day'])} of rows are days where the store sold nothing in any family.")
     add(f"- `qc_sales_outlier`: {pct(tr['qc_sales_outlier'])} of rows are above Q3 + {config.OUTLIER_IQR_MULT:g} x IQR of their own series "
         "(non-zero days). **Not removed or clipped**: they are real sales (promotions, big events).")
+    sus = ctx["suspects"]
+    add(f"- `qc_sales_suspect`: **{len(sus):,} rows** ({pct(tr['qc_sales_suspect'])} of rows) are SUSPECTED DATA ERRORS: "
+        f"above Q3 + {config.OUTLIER_SUSPECT_MULT:g} x IQR of their own series AND not on a holiday, event, earthquake or promotion day. "
+        "Real peaks (promotions, holidays, events) are never flagged here.")
+    add("  - **Decision:** `sales` is NEVER changed. Suspect rows are excluded from TRAINING, and in `sales_capped` they are capped "
+        "at the normal outlier limit, so lags and rolling averages do not copy one bad day forward. Validation/test are scored on the real `sales`.")
+    add("  - Full list: `data/processed/suspect_sales_rows.csv`. Please look at the biggest ones and confirm they are really errors.")
+    if len(sus):
+        add("")
+        add("| date | store | family | sales | normal limit | x limit |")
+        add("|---|---|---|---|---|---|")
+        for _, r in sus.head(20).iterrows():
+            add(f"| {r['date'].date()} | {int(r['store_nbr'])} | {r['family']} | {r['sales']:,.0f} | {r['outlier_limit']:,.0f} | {r['times_normal_limit']:.1f} |")
+        add("")
     add("- **IMPORTANT: `qc_` columns are built from sales, so they are NOT available for the future. "
         "Use them only to filter/inspect rows. NEVER use them as model features.**")
     add("")
@@ -416,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
     train_clean = enrich(train, stores, oil_daily, calendar)
 
     print("[5/6] Flagging zero series, closed stores and outliers ...")
-    train_clean, series_summary = add_qc_flags(train_clean, config.CLEANING_STATS_CUTOFF)
+    train_clean, series_summary, suspects = add_qc_flags(train_clean, config.CLEANING_STATS_CUTOFF)
     train_clean = train_clean[config.TRAIN_CLEAN_COLUMNS]
     if len(train_clean) != len(train):
         raise RuntimeError("row count changed during cleaning")
@@ -434,10 +467,11 @@ def main(argv: list[str] | None = None) -> int:
     hol.to_csv(config.HOLIDAYS_CLEAN_PATH, index=False, date_format="%Y-%m-%d", encoding="utf-8")
     oil_daily.to_csv(config.OIL_DAILY_PATH, index=False, date_format="%Y-%m-%d")
     series_summary.to_csv(config.SERIES_SUMMARY_PATH, index=False, date_format="%Y-%m-%d")
+    suspects.to_csv(config.PROCESSED_DIR / "suspect_sales_rows.csv", index=False, date_format="%Y-%m-%d")
 
     write_cleaning_report({
         "train_clean": train_clean, "test_clean": test_clean, "oil_info": oil_info,
-        "hol_info": hol_info, "unmatched": unmatched, "qc": series_summary,
+        "hol_info": hol_info, "unmatched": unmatched, "qc": series_summary, "suspects": suspects,
     })
     print(f"\nSaved: {config.TRAIN_CLEAN_PATH}  ({len(train_clean):,} rows)")
     if test_clean is not None:

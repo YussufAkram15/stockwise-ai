@@ -82,7 +82,7 @@ CLEANING_STATS_CUTOFF = "2017-06-30"
 # ----------------------------------------------------------------------------
 TRAIN_END   = "2017-06-30"   # last day of the training window
 VAL_START   = "2017-07-01"   # first day of the validation window
-VAL_END     = "2017-07-30"   # last day of the validation window (30 days)
+VAL_END = "2017-07-30"   # validation ends 30 Jul; 31 Jul - 15 Aug is the TEST slice
 TEST_START  = "2017-07-31"   # first day of the test window (16 days = the forecast horizon)
 TEST_END    = "2017-08-15"   # last day of the test window (= last day of train.csv)
 # The test window is scored ONCE, at the end, for the chosen model only.
@@ -152,3 +152,22 @@ COLUMN_DOC = {
     "qc_store_closed_day": "QC FLAG: the store sold nothing in ANY family that day (closed or not open yet).",
     "qc_sales_outlier": "QC FLAG: sale is above Q3 + k*IQR of its own series (limit learned before the cutoff).",
 }
+# >>> team-fixes: suspected data errors (details in reports/cleaning_report.md)
+# A sale is a SUSPECTED DATA ERROR when it is above Q3 + OUTLIER_SUSPECT_MULT x IQR of its own series
+# AND no holiday, event, earthquake or promotion explains it. Real peaks are never flagged.
+OUTLIER_SUSPECT_MULT = 10.0
+# False = only suspected data errors are capped in sales_capped (real peaks untouched).
+# True  = every outlier is capped there (experiment: stops real peaks echoing into the lags).
+CAP_ALL_OUTLIERS_IN_HISTORY = False
+if "qc_sales_suspect" not in QC_FLAGS:
+    QC_FLAGS.append("qc_sales_suspect")
+if "sales_capped" not in TRAIN_CLEAN_COLUMNS:
+    TRAIN_CLEAN_COLUMNS.insert(TRAIN_CLEAN_COLUMNS.index("sales") + 1, "sales_capped")
+if "qc_sales_suspect" not in TRAIN_CLEAN_COLUMNS:
+    TRAIN_CLEAN_COLUMNS.append("qc_sales_suspect")
+TEST_CLEAN_COLUMNS = [c for c in TRAIN_CLEAN_COLUMNS if c not in ("sales", "sales_capped") and c not in QC_FLAGS]
+COLUMN_DOC["sales_capped"] = ("Same as sales, except suspected data errors are capped at the normal outlier limit. "
+                              "Use it to build lags / rolling means. `sales` itself is never changed.")
+COLUMN_DOC["qc_sales_suspect"] = ("QC FLAG: extremely high sale (> Q3 + 10 x IQR of its series) that no holiday, event, "
+                                  "earthquake or promotion explains. Left out of TRAINING. Never a model feature.")
+# <<< team-fixes
