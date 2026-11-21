@@ -6,7 +6,7 @@ Re-run `python src/feature_engineering.py` to refresh.
 - Total rows : 3,000,888
 - Train rows (≤ 2017-06-30) : 2,918,916
 - Val rows (2017-07-01 → 2017-07-30) : 53,460
-- Columns : 47
+- Columns : 49
 
 ## Feature groups
 
