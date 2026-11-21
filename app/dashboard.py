@@ -77,7 +77,10 @@ def show_table(table: pd.DataFrame) -> None:
 # Sidebar
 # ---------------------------------------------------------------------------
 st.sidebar.title("📦 StockWise AI")
-page = st.sidebar.radio("Page", ["Overview", "Forecast", "Reorder table", "Model accuracy"])
+PAGES = ["Overview", "Forecast", "Reorder table", "Model accuracy"]
+# A page can also be opened by link, e.g. http://localhost:8501/?page=Forecast
+start = st.query_params.get("page", "Overview")
+page = st.sidebar.radio("Page", PAGES, index=PAGES.index(start) if start in PAGES else 0)
 st.sidebar.markdown(f"**Today:** {TODAY.date()} (last day of data)  \n**Forecast model:** {MODEL}  \n"
                     f"**Horizon:** {forecast['date'].min().date()} → {forecast['date'].max().date()}")
 
@@ -160,8 +163,9 @@ elif page == "Forecast":
         c2.metric("Reorder point", f"{r['reorder_point']:,.1f}")
         c3.metric("Safety stock", f"{r['safety_stock']:,.1f}")
         c4.metric("Order quantity", f"{r['order_qty']:,.0f}")
-        c5.metric("Runs out on", "not within 16 days" if pd.isna(r["stockout_date"]) else str(r["stockout_date"].date()))
-        st.caption(f"Lead time {r['lead_time_days']:.0f} days (simulated) · average forecast "
+        c5.metric("Runs out on", "—" if pd.isna(r["stockout_date"]) else str(r["stockout_date"].date()))
+        st.caption(f"\u2014 = does not run out within the 16 days · "
+                   f"Lead time {r['lead_time_days']:.0f} days (simulated) · average forecast "
                    f"{r['avg_daily_forecast']:,.1f} units/day · usual forecast error (σ) {r['sigma']:,.1f}")
 
 # ---------------------------------------------------------------------------
@@ -221,4 +225,4 @@ else:
         family = c2.selectbox("Family", FAMILIES, key="acc_family",
                               index=FAMILIES.index("GROCERY I") if "GROCERY I" in FAMILIES else 0)
         one = val[(val["store_nbr"] == store) & (val["family"] == family)].set_index("date")
-        st.line_chart(one[["sales", "prediction"]])
+        st.line_chart(one[["sales", "prediction"]], color=["#4c78a8", "#f58518"])
