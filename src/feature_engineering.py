@@ -206,7 +206,7 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
 def add_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     print("  Computing sales lags ...")
     for lag in LAG_DAYS:
-        df[f"sales_lag_{lag}"] = _fast_lag(df, "sales", lag).astype("float32")
+        df[f"sales_lag_{lag}"] = _fast_lag(df, "sales_capped", lag).astype("float32")
 
     print("  Computing promo lags ...")
     df["promo_lag_7"] = _fast_lag(df, "onpromotion", 7).astype("float32")
@@ -231,7 +231,7 @@ def add_rolling_features(df: pd.DataFrame) -> pd.DataFrame:
         rolling_col = f"_sales_roll_{w}_mean"
 
         df[rolling_col] = _fast_roll(
-            df, "sales", w, "mean"
+            df, "sales_capped", w, "mean"
         ).astype("float32")
 
         df[f"sales_roll_{w}_mean"] = _fast_lag(
@@ -273,7 +273,7 @@ def add_encodings(df: pd.DataFrame, train_mask: pd.Series) -> pd.DataFrame:
     # Calculate cumulative historical mean for each store-family.
     # For forecast date t, use only information available at t - 16 days.
     df["_series_cumulative_mean"] = (
-        df.groupby(KEY, sort=False)["sales"]
+        df.groupby(KEY, sort=False)["sales_capped"]
         .transform(
             lambda s: s.expanding(min_periods=1).mean()
         )
@@ -316,7 +316,7 @@ def build_features(
     if test_clean is not None:
         # test has no 'sales' or qc_ columns — add placeholder sales=NaN
         test_ext = test_clean.copy()
-        for c in ["sales"] + config.QC_FLAGS:
+        for c in ["sales", "sales_capped"] + config.QC_FLAGS:
             if c not in test_ext.columns:
                 test_ext[c] = np.nan
         combined = pd.concat([train_clean, test_ext], ignore_index=True)
@@ -328,6 +328,11 @@ def build_features(
         is_kaggle_test = pd.Series(False, index=combined.index)
 
     combined["date"] = pd.to_datetime(combined["date"])
+    # History features are built from sales_capped (= sales, except suspected data errors are capped),
+    # so one bad day is not copied forward into the lags / rolling means. Old cleaned file -> plain sales.
+    if "sales_capped" not in combined.columns:
+        combined["sales_capped"] = np.nan
+    combined["sales_capped"] = combined["sales_capped"].fillna(combined["sales"])
     if combined.duplicated(KEY + ["date"]).any():
         raise ValueError(
             "Duplicate records detected for (store_nbr, family, date)."

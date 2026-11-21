@@ -89,12 +89,36 @@ FEATURE_COLS = [
 ]
 
 TARGET = "sales"
+# One MLflow store and one experiment name for the whole team (same as the Polynomial run)
+MLFLOW_URI = f"sqlite:///{(config.PROJECT_ROOT / 'mlflow.db').as_posix()}"
+MLFLOW_EXPERIMENT = "stockwise-ai"
 
 
 
 # ---------------------------------------------------------------------------
 # Metric
 # ---------------------------------------------------------------------------
+def mae(actual: np.ndarray, predicted: np.ndarray) -> float:
+    return float(np.mean(np.abs(actual - predicted)))
+
+
+def rmse(actual: np.ndarray, predicted: np.ndarray) -> float:
+    return float(np.sqrt(np.mean((actual - predicted) ** 2)))
+
+
+def wape(actual: np.ndarray, predicted: np.ndarray) -> float:
+    """100 * sum|actual - predicted| / sum(actual)  (in %). The MAIN team metric."""
+    total = float(np.sum(actual))
+    return float("nan") if total <= 0 else float(100.0 * np.sum(np.abs(actual - predicted)) / total)
+
+
+def all_metrics(actual: np.ndarray, predicted: np.ndarray) -> dict:
+    """The team metrics (MAE, RMSE, WAPE) plus RMSLE, all on predictions clipped to 0."""
+    p = np.clip(predicted, 0, None)
+    return {"val_mae": mae(actual, p), "val_rmse": rmse(actual, p),
+            "val_wape": wape(actual, p), "val_rmsle": rmsle(actual, p)}
+
+
 def rmsle(actual: np.ndarray, predicted: np.ndarray) -> float:
     """Root Mean Squared Log Error. Predictions clipped to 0 (no negatives)."""
     p = np.clip(predicted, 0, None)
@@ -122,6 +146,11 @@ def load_and_split(
     # Exclude QC-flagged rows from the training window only
     # (zero series and pre-first-sale rows add noise with zero targets)
     qc_mask = (df["qc_zero_series"].fillna(0) == 0) & (df["qc_before_first_sale"].fillna(0) == 0)
+    if "qc_sales_suspect" in df.columns:
+        # suspected DATA ERRORS (extreme AND unexplained) are left out of training; real peaks stay in
+        n_sus = int(((df["date"] <= pd.Timestamp(config.TRAIN_END)) & (df["qc_sales_suspect"].fillna(0) == 1)).sum())
+        print(f"[TRAIN] Suspected data-error rows removed from training: {n_sus:,}")
+        qc_mask = qc_mask & (df["qc_sales_suspect"].fillna(0) == 0)
 
     train_mask = (df["date"] <= pd.Timestamp(config.TRAIN_END)) & qc_mask
     val_mask   = (df["date"] >= pd.Timestamp(config.VAL_START)) & \
@@ -223,7 +252,8 @@ def try_log_mlflow(run_name: str, params: dict, metrics: dict,
                    importances: dict | None) -> None:
     try:
         import mlflow
-        mlflow.set_experiment("StockWise-AI")
+        mlflow.set_tracking_uri(MLFLOW_URI)
+        mlflow.set_experiment(MLFLOW_EXPERIMENT)
         with mlflow.start_run(run_name=run_name):
             mlflow.log_params(params)
             mlflow.log_metrics(metrics)
@@ -283,8 +313,10 @@ def train_and_eval(
 
     elapsed = time.time() - t0
     score = rmsle(y_val, preds)
+    scores = all_metrics(y_val, preds)
 
     print(f"  RMSLE : {score:.5f}")
+    print(f"  MAE = {scores['val_mae']:.3f}   RMSE = {scores['val_rmse']:.3f}   WAPE = {scores['val_wape']:.2f}%")
     print(f"  Time  : {elapsed:.1f}s")
 
     importances = get_importances(fitted if name != "XGBoost" else fitted[1], feat_cols)
@@ -293,13 +325,14 @@ def train_and_eval(
         try_log_mlflow(
             run_name=name,
             params={"model": name},
-            metrics={"val_rmsle": score, "train_time_s": elapsed},
+            metrics={**scores, "train_time_s": elapsed},
             importances=importances,
         )
 
     return {
         "name": name,
         "rmsle": score,
+        "scores": scores,
         "time_s": elapsed,
         "preds": preds,
         "fitted": fitted,
@@ -340,7 +373,7 @@ def save_comparison_artifacts(
     )
 
     # Save model metrics and feature importances
-    best = min(results, key=lambda r: r["rmsle"])
+    best = min(results, key=lambda r: r["scores"]["val_wape"])      # WAPE is the main metric
 
     metadata = {
         "train_end": str(config.TRAIN_END),
@@ -352,6 +385,7 @@ def save_comparison_artifacts(
             {
                 "name": r["name"],
                 "rmsle": float(r["rmsle"]),
+                "scores": {k: float(v) for k, v in r["scores"].items()},
                 "time_s": float(r["time_s"]),
                 "importances": {
                     k: float(v)
@@ -422,9 +456,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # Best model
-    best = min(results, key=lambda x: x["rmsle"])
+    best = min(results, key=lambda x: x["scores"]["val_wape"])      # WAPE is the main metric
     print(f"\n{'='*60}")
-    print(f"Best model : {best['name']}  (RMSLE = {best['rmsle']:.5f})")
+    print(f"Best model : {best['name']}  (WAPE = {best['scores']['val_wape']:.2f}%,  RMSLE = {best['rmsle']:.5f})")
     print(f"{'='*60}")
 
     # Save best predictions
