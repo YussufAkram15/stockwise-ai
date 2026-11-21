@@ -265,6 +265,37 @@ How the scripts work together:
 
 None of these scripts touches the test period.
 
+### 4.8 Level 2: from forecast to reorder advice — `src/forecast_best_model.py`, `src/inventory.py`
+
+A forecast only helps if it turns into a decision: **"should this store reorder this product now?"**
+
+1. `forecast_best_model.py` takes the best model (`models/best_model.pkl`, today Random Forest) and forecasts the next 16 days (2017-08-16 → 08-31) for every store × family, plus its validation predictions. (`forecast_naive.py` writes the same files with the naive baseline, so Level 2 also works without trained models.)
+2. `inventory.py` applies standard stock formulas to every series:
+
+```text
+sigma          = how much the forecast usually misses per day (from the validation errors)
+safety_stock   = 1.65 × sigma × √lead_time          (1.65 → enough 95% of the time)
+reorder_point  = average daily forecast × lead_time + safety_stock
+status         = REORDER    if stock on hand ≤ reorder_point
+                 OVERSTOCK  if stock on hand > 16-day forecast + safety_stock
+                 OK         otherwise
+order_qty      = 16-day forecast + safety_stock − stock on hand   (when REORDER)
+```
+
+⚠️ **The Favorita data has no stock levels and no delivery times, so both are simulated** (lead time 2–7 days per store, stock 0–30 days of sales, fixed random seed). The table shows the **method**; a real shop would plug in its real stock.
+
+A better model means a smaller sigma, so a smaller safety stock, so less money stuck on shelves — this is how Level 1 pays off in Level 2.
+Output: `reports/reorder_table.csv` (one row per store × family) and `reports/inventory_summary.md`.
+
+### 4.9 Level 3: dashboard — `app/dashboard.py`
+
+A Streamlit web page that only **reads** the files above (no training, no raw data):
+
+- **Overview** — how many series need REORDER / OK / OVERSTOCK, the 10 most urgent items, the total forecast per day.
+- **Forecast** — pick a store and a family: the last 60 days of real sales, then the 16-day forecast, and its stock advice.
+- **Reorder table** — filter by status, store, family and "runs out before", download as CSV. Answers questions like *"which stores may run out of BEVERAGES next week?"*.
+- **Model accuracy** — the comparison table of all models against the baseline, and real vs predicted in July for any series.
+
 ---
 
 ## 5. The rules the whole team follows
@@ -350,7 +381,12 @@ stockwise-ai/
 │   ├── train_polynomial.py   ← step 8 (Polynomial)
 │   ├── final_comparison.py   ← step 9 (one table for all models + charts)
 │   ├── residual_analysis.py  ← step 9 (where the best model is wrong)
-│   └── run_pipeline.py       ← runs steps 2 → 9 with one command
+│   ├── run_pipeline.py       ← runs steps 2 → 9 with one command
+│   ├── forecast_best_model.py← Level 2: 16-day forecast with the best model
+│   ├── forecast_naive.py     ← Level 2: the same files with the naive baseline
+│   └── inventory.py          ← Level 2: reorder advice per store × family
+├── app/
+│   └── dashboard.py          ← Level 3: the dashboard (streamlit run app/dashboard.py)
 ├── requirements.txt          ← exact library versions
 └── README.md
 ```
@@ -484,7 +520,22 @@ python src/residual_analysis.py
 
 Options for `train_models.py`: `--models lr rf xgb` trains only some models (lr = Linear, rf = Random Forest, xgb = XGBoost); `--no-mlflow` skips the logbook. `residual_analysis.py --no-shap` skips the SHAP charts (they need `pip install shap`).
 
-**Step 7 — Open the experiment logbook (MLflow):**
+**Step 7 — Level 2, the reorder advice** (after the models are trained):
+
+```bash
+python src/forecast_best_model.py
+python src/inventory.py
+```
+
+**Step 8 — Level 3, the dashboard:**
+
+```bash
+streamlit run app/dashboard.py
+```
+
+It opens in the browser (usually <http://localhost:8501>).
+
+**Step 9 — Open the experiment logbook (MLflow):**
 
 ```bash
 mlflow ui --backend-store-uri sqlite:///mlflow.db
@@ -555,24 +606,25 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 | Polynomial Regression | Zenab | ✅ Done — `src/train_polynomial.py` |
 | Model comparison and error analysis | Sara, Zenab | ✅ Done — `src/final_comparison.py`, `src/residual_analysis.py` |
 | Final test score of the best model | Yussuf | ⏳ Not yet |
+| Level 2 — reorder advice | Yussuf | ✅ Done — `src/forecast_best_model.py`, `src/inventory.py` (stock simulated) |
+| Level 3 — dashboard (without the AI assistant) | Yussuf | ✅ Done — `app/dashboard.py` |
 
 ---
 
 ## 13. Limitations and next steps
 
-**Now (Level 1, the graded core):**
+**Still to do:**
 
-- Score all models with MAE / RMSE / WAPE (the split is already in place) and log them in MLflow.
-- Add Polynomial Regression.
-- XGBoost's early stopping currently looks at the validation period it is scored on; it should use the end of the training period instead.
-- Compare all five models, study where the best one is wrong (by date, store, family, holidays), then score the test period **once**.
-- Join every step into one pipeline that runs from the raw files to the comparison table.
+- Score the best model (Random Forest) on the test period **once** and log it as `test_wape`.
+- The best model is trained on data up to 2017-06-30; for the real 16-day forecast it could be retrained on all data up to 2017-08-15.
+- Level 3 — the AI assistant (a ready-made LLM that answers questions by reading our output tables).
+- Level 4 — deployment on the cloud (Docker + AWS).
 
-**Later (only after Level 1 is finished):**
+**Limitations:**
 
-- Level 2 — turn forecasts into reorder advice (safety stock, reorder point, "reorder / OK / overstock").
-- Level 3 — a simple dashboard with an AI assistant that answers questions from our outputs.
-- Level 4 — deployment on the cloud.
+- Stock levels and lead times in Level 2 are simulated: the dataset has none.
+- Sudden one-day jumps (e.g. a cleaning-products order 10× the usual) cannot be predicted from past sales; they cause the biggest single errors.
+- Holidays are harder than normal days (WAPE 19.9% vs 12.7%).
 
 ---
 
