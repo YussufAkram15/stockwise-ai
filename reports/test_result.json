@@ -1,0 +1,12 @@
+{
+  "model": "RandomForest",
+  "trained_on": "2013-01-01 -> 2017-07-30 (train + validation)",
+  "test_period": "2017-07-31 -> 2017-08-15",
+  "test_rows": 28512,
+  "test_mae": 74.1404,
+  "test_rmse": 255.3291,
+  "test_wape": 15.871,
+  "validation_wape": 12.7485,
+  "naive_test_wape": 19.85,
+  "fit_seconds": 176.1
+}
