@@ -1,0 +1,54 @@
+
+==============================================================================
+STOCKWISE AI - LEAKAGE CHECK (perturbation test)
+==============================================================================
+Future = everything after 2017-06-30.  Rows up to 2017-07-15 must not change.
+Building features (normal) ...
+Building features (future sales and oil destroyed) ...
+
+==============================================================================
+Every engineered feature must be identical for rows up to the safe date
+==============================================================================
+[PASS] same rows in both runs   (2,945,646 rows compared)
+[PASS] feature 'day_of_week' does not use future information
+[PASS] feature 'day_of_month' does not use future information
+[PASS] feature 'week_of_year' does not use future information
+[PASS] feature 'month' does not use future information
+[PASS] feature 'quarter' does not use future information
+[PASS] feature 'year' does not use future information
+[PASS] feature 'is_weekend' does not use future information
+[PASS] feature 'days_to_month_end' does not use future information
+[PASS] feature 'is_payday' does not use future information
+[PASS] feature 'days_since_last_holiday' does not use future information
+[PASS] feature 'days_to_next_holiday' does not use future information
+[PASS] feature 'sales_lag_16' does not use future information
+[PASS] feature 'sales_lag_21' does not use future information
+[PASS] feature 'sales_lag_28' does not use future information
+[PASS] feature 'promo_lag_7' does not use future information
+[PASS] feature 'oil_lag_16' does not use future information
+[PASS] feature 'oil_lag_21' does not use future information
+[PASS] feature 'oil_lag_28' does not use future information
+[PASS] feature 'sales_roll_7_mean' does not use future information
+[PASS] feature 'sales_roll_28_mean' does not use future information
+[PASS] feature 'promo_roll_7_mean' does not use future information
+[PASS] feature 'store_family_mean_sales' does not use future information
+[PASS] feature 'store_type_enc' does not use future information
+[PASS] feature 'family_enc' does not use future information
+[PASS] feature 'city_enc' does not use future information
+[PASS] feature 'state_enc' does not use future information
+
+==============================================================================
+Control: the test must be able to see a leak
+==============================================================================
+[PASS] rows AFTER the safe date do change (so the test is not blind)
+
+==============================================================================
+Model feature lists must not contain sales, ids, dates or qc_ flags
+==============================================================================
+[PASS] train_models: no forbidden column used as a feature   (36 features)
+[PASS] train_polynomial: no forbidden column used as a feature   (9 features)
+
+==============================================================================
+FINAL RESULT
+==============================================================================
+NO LEAKAGE FOUND: every feature uses only information that is at least 16 days old.

@@ -133,11 +133,20 @@ One model with the same columns is used for all 16 days, so a clue must exist fo
  6. Build features (clues) ............ src/feature_engineering.py ──► data/processed/train_features.parquet
         │
         ▼
- 7. Train models + compare ............ src/train_models.py, src/compare_models.py
+ 7. Prove there is no leakage ......... src/leakage_check.py
         │
         ▼
- 8. Pick the best model, score the test period once (to do)
+ 8. Train the models .................. src/train_models.py (Linear, Random Forest, XGBoost)
+                                        src/train_polynomial.py (Polynomial)
+        │
+        ▼
+ 9. Compare + error analysis .......... src/final_comparison.py, src/residual_analysis.py
+        │
+        ▼
+10. Score the best model on the test period once (to do)
 ```
+
+Steps 2 → 9 run with **one command**: `python src/run_pipeline.py` (see section 9).
 
 All paths and team rules live in one file, `src/config.py`, so every script uses the same settings.
 
@@ -148,7 +157,7 @@ Report: `reports/inspection_report.txt`.
 
 ### 4.2 Clean and merge — `src/prepare_data.py`
 
-**The golden rule: no row is added or removed, and `sales` is never changed. Cleaning only adds columns.** The input has 3,000,888 rows × 6 columns; the output has 3,000,888 rows × 23 columns. Lags need a complete calendar for every series, and every store × family needs a forecast, so nothing is deleted — unusual rows get a **flag** instead.
+**The golden rule: no row is added or removed, and `sales` is never changed. Cleaning only adds columns.** The input has 3,000,888 rows × 6 columns; the output has 3,000,888 rows × 25 columns. Lags need a complete calendar for every series, and every store × family needs a forecast, so nothing is deleted — unusual rows get a **flag** instead.
 
 What it does:
 
@@ -169,8 +178,11 @@ What it does:
    | `qc_before_first_sale` | Day before the series' first ever sale (store not opened yet, family not stocked yet) | 18.5% |
    | `qc_store_closed_day` | The store sold nothing in any family that day | 8.1% |
    | `qc_sales_outlier` | Sale above Q3 + 3 × IQR of its own series (flagged, **not** removed — these are real sales) | 0.6% |
+   | `qc_sales_suspect` | **Suspected data error**: above Q3 + 10 × IQR of its own series **and** not explained by a holiday, event, earthquake or promotion (1,954 rows, e.g. store 39 MEATS sold 89,576 on 2016-10-07, limit 311). Left out of **training** only | 0.07% |
 
    ⚠️ QC flags are built from the sales themselves, so they are **never used as model features** — only to filter rows.
+
+   Extra column `sales_capped`: the same as `sales`, except suspected data errors are capped at the normal outlier limit. Lags and rolling means are built from it, so one bad day is not copied into the clues of later days. `sales` itself is never changed, and every score uses the real `sales`.
 5. **Save:** sorted by store → family → date and written as Parquet (smaller and faster than CSV, keeps column types).
 
 Report with every decision: `reports/cleaning_report.md`.
@@ -207,7 +219,7 @@ Turns the cleaned table into model-ready clues. All statistics and encodings are
 
 | Group | Features |
 |---|---|
-| Calendar | `day_of_week`, `day_of_month`, `week_of_year`, `month`, `quarter`, `year`, `is_weekend`, `days_to_month_end`, `is_payday` |
+| Calendar | `day_of_week`, `day_of_month`, `week_of_year`, `month`, `quarter`, `year`, `is_weekend`, `days_to_month_end`, `is_payday`, `days_to_next_holiday`, `days_since_last_holiday` (capped at 30) |
 | Sales lags | `sales_lag_16`, `sales_lag_21`, `sales_lag_28` |
 | Rolling means (shifted by 16 days) | `sales_roll_7_mean`, `sales_roll_28_mean` |
 | Promotions (known in advance — stores plan them, and `test.csv` gives them) | `onpromotion`, `promo_lag_7`, `promo_roll_7_mean` |
@@ -215,10 +227,13 @@ Turns the cleaned table into model-ready clues. All statistics and encodings are
 | Holidays (the calendar is known in advance) | the 7 flags from step 4.2 |
 | Store and family | `store_nbr`, `cluster`, `store_type_enc`, `family_enc`, `city_enc`, `state_enc`, `store_family_mean_sales` (series average, delayed by 16 days) |
 
-Lags and rolling means are computed **per store and family** and by **matching dates**, so the missing 25 December does not shift them.
+Lags and rolling means are computed **per store and family** and by **matching dates**, so the missing 25 December does not shift them (when the exact day is missing, the day before is used — always older, never newer). Sales clues are built from `sales_capped` (see 4.2).
 Report: `reports/feature_report.md`.
 
-### 4.7 Models and evaluation — `src/train_models.py`, `src/compare_models.py`
+**Leakage check — `src/leakage_check.py`.** A proof, not a promise: it builds the features twice, the second time after scrambling every sale and oil price after the end of training. Every feature of every row up to 15 days after the end of training must come out **identical** — if one changes, that feature looked at the future and the check fails. As a control, later rows must change. It also checks that no model uses `sales`, ids, dates or `qc_` flags as a clue.
+Report: `reports/leakage_report.txt`.
+
+### 4.7 Models and evaluation — `src/train_models.py`, `src/train_polynomial.py`, `src/final_comparison.py`, `src/residual_analysis.py`
 
 Five models are compared on exactly the same days:
 
@@ -240,7 +255,15 @@ Five models are compared on exactly the same days:
 
 Why WAPE is the main score: it is a percentage a manager understands; big families (most of the units) count most; and it works with zero-sales rows. The common MAPE divides each row by its own sales and breaks on the 31% of rows with zero sales.
 
-> **Status:** `train_models.py` and `compare_models.py` are first versions. They already use the agreed split from `src/config.py` (validation = the same 30 days as the baseline), but they still score with RMSLE. They are being moved to MAE / RMSE / WAPE, so their numbers are **not** final results yet.
+How the scripts work together:
+
+- `train_models.py` trains Linear Regression, Random Forest and XGBoost on the training period, scores them on validation, logs each run to MLflow and saves the best one to `models/best_model.pkl`. Linear Regression does not get the label codes (store number, family code, city code …), because a straight line would read "family 20" as twice "family 10".
+- **XGBoost early stopping is honest:** the number of trees is chosen on the **last 28 days of the training period**, then the model is retrained on the whole training period. Validation is never used to tune it.
+- `train_polynomial.py` trains the Polynomial model on a few numeric clues (degree 2).
+- `final_comparison.py` scores **every** model, including the naive baseline, with the same code on the same validation rows, and writes `reports/model_comparison.md` / `.csv` and charts.
+- `residual_analysis.py` explains where the best model is wrong: by store, by family, over time, on holidays, and which clues matter most.
+
+None of these scripts touches the test period.
 
 ---
 
@@ -275,7 +298,23 @@ Why a random split is wrong here: shuffling would put future days (e.g. 10 July)
 
 Where the baseline fails (and what the real models should fix): it knows the weekday but not the day of the month (it guesses 22–26% too low on 1–2 August, right after payday) and not holidays (it guesses 18% too high on the weekend after the 11 August national holiday).
 
-The results of Linear, Polynomial, Random Forest and XGBoost will be added here once they are scored with the agreed split and scores.
+**All models on validation** (2017-07-01 → 07-30, the same 53,460 rows for every model; from `reports/model_comparison.md`):
+
+| Model | MAE | RMSE | WAPE | vs baseline |
+|---|---|---|---|---|
+| **Random Forest** (best) | **62.30** | **219.30** | **12.75%** | 27% less error |
+| XGBoost | 67.47 | 260.20 | 13.81% | 21% less error |
+| Polynomial Regression | 79.10 | 250.38 | 16.19% | 7.5% less error |
+| Naive lag 21 (baseline) | 85.54 | 318.98 | 17.50% | — |
+| Linear Regression | 86.77 | 269.53 | 17.76% | 1.4% **more** error |
+
+What this says:
+
+- **Random Forest wins**: its total error is 12.75% of all units sold, about a quarter less than copying the past. Its predictions are not biased (predicted total / actual total = 1.01).
+- **Trees beat straight lines**: sales depend on combinations (this family, in this store, on a weekend, with a promotion), which trees capture and a single straight line cannot. Linear Regression does not even beat the baseline.
+- **Where it is still wrong**: 84% of the error comes from the biggest 25% of series (BEVERAGES, GROCERY I, CLEANING); holidays are harder (WAPE 19.9% vs 12.7% on normal days); the largest single misses are sudden one-day jumps (e.g. store 30 CLEANING sold 10,392 on 2017-07-10 against a usual few hundred).
+
+The test score of the best model (used once) will be added here.
 
 ---
 
@@ -306,8 +345,12 @@ stockwise-ai/
 │   ├── validate_data.py      ← step 3
 │   ├── eda.py                ← step 4
 │   ├── feature_engineering.py← step 6
-│   ├── train_models.py       ← step 7 (training)
-│   └── compare_models.py     ← step 7 (comparison report and charts)
+│   ├── leakage_check.py      ← step 7 (proof of no leakage)
+│   ├── train_models.py       ← step 8 (Linear, Random Forest, XGBoost)
+│   ├── train_polynomial.py   ← step 8 (Polynomial)
+│   ├── final_comparison.py   ← step 9 (one table for all models + charts)
+│   ├── residual_analysis.py  ← step 9 (where the best model is wrong)
+│   └── run_pipeline.py       ← runs steps 2 → 9 with one command
 ├── requirements.txt          ← exact library versions
 └── README.md
 ```
@@ -384,7 +427,17 @@ The cleaning needs at least `train.csv`, `stores.csv`, `oil.csv` and `holidays_e
 
 ## 9. How to run the project
 
-Run every command **from the project folder** (`stockwise-ai/`) with the virtual environment active. Run the steps in this order; each step needs the files made by the step before.
+Run every command **from the project folder** (`stockwise-ai/`) with the virtual environment active.
+
+**The short way — everything from the raw files to the comparison table in one command:**
+
+```bash
+python src/run_pipeline.py
+```
+
+It runs cleaning + validation, features, the leakage check, all models and the comparison, and stops at the first step that fails. Options: `--no-mlflow`, `--models lr rf` (only some of the three models in `train_models.py`), `--from train_models` (restart from a step), `--skip leakage_check`. Then run `python src/residual_analysis.py` for the error analysis.
+
+**The long way — one step at a time**, in this order (each step needs the files made by the step before):
 
 **Step 1 — Look at the raw files** (changes nothing):
 
@@ -419,14 +472,17 @@ python src/feature_engineering.py
 
 Writes `data/processed/train_features.parquet` and `reports/feature_report.md`. Add `--no-test` to skip the Kaggle test period.
 
-**Step 6 — Train and compare the models** (first versions, see section 4.7):
+**Step 6 — Check for leakage, train and compare the models** (see section 4.7):
 
 ```bash
+python src/leakage_check.py
 python src/train_models.py
-python src/compare_models.py
+python src/train_polynomial.py
+python src/final_comparison.py
+python src/residual_analysis.py
 ```
 
-Options: `--models lr rf xgb` trains only some models (lr = Linear, rf = Random Forest, xgb = XGBoost); `--no-mlflow` skips the logbook.
+Options for `train_models.py`: `--models lr rf xgb` trains only some models (lr = Linear, rf = Random Forest, xgb = XGBoost); `--no-mlflow` skips the logbook. `residual_analysis.py --no-shap` skips the SHAP charts (they need `pip install shap`).
 
 **Step 7 — Open the experiment logbook (MLflow):**
 
@@ -443,14 +499,17 @@ Open the link it prints (usually <http://127.0.0.1:5000>). `mlflow.db` is create
 | Step | File | What it is |
 |---|---|---|
 | 1 | `reports/inspection_report.txt` | Facts about the raw files |
-| 2 | `data/processed/train_clean.parquet` | Cleaned data: 3,000,888 rows × 23 columns (not in Git) |
+| 2 | `data/processed/train_clean.parquet` | Cleaned data: 3,000,888 rows × 25 columns (not in Git) |
 | 2 | `data/processed/test_clean.parquet` | The Kaggle test period, enriched the same way (not in Git) |
-| 2 | `reports/cleaning_report.md` | Every cleaning decision and a dictionary of all 23 columns |
+| 2 | `reports/cleaning_report.md` | Every cleaning decision and a dictionary of all 25 columns |
 | 3 | `reports/validation_report.txt` | All PASS / WARN / FAIL checks |
 | 4 | `reports/eda/*.png`, `reports/eda/eda_notes.md` | 9 charts and the findings |
 | 4 (baseline) | `reports/naive_baseline_metrics.csv`, `reports/figures/naive_baseline_actual_vs_predicted.png` | The number to beat |
 | 5 | `data/processed/train_features.parquet`, `reports/feature_report.md` | The feature table and its summary |
-| 6 | `models/best_model.pkl`, `reports/model_comparison.md`, `reports/figures/0*_*.png` | Trained model and comparison (re-created on each run, not in Git) |
+| 6 | `reports/leakage_report.txt` | The leakage proof: PASS / FAIL per feature |
+| 6 | `models/best_model.pkl` | The best trained model (re-created on each run, not in Git) |
+| 6 | `reports/model_comparison.md`, `reports/model_comparison.csv`, `reports/figures/*.png` | One table for all models, plus charts |
+| 6 | `reports/residual_analysis.md`, `reports/figures/res_*.png` | Where the best model is wrong |
 
 Generated data and models are **not** committed: anyone can re-create them by running the steps above.
 
@@ -480,19 +539,22 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 | Adham | Feature engineering | Random Forest |
 | Sara | Split, scores, MLflow, model comparison, error analysis | XGBoost |
 
-**Status (17 November 2026):**
+**Status (21 November 2026):**
 
 | Step | Owner | Status |
 |---|---|---|
 | Inspection, cleaning, validation | Zenab | ✅ Done |
 | EDA charts and notes | Hazem | ✅ A version is in the repository (`src/eda.py`); Hazem's own version is not yet |
 | Naive baseline | Yussuf | ✅ Done, logged in MLflow as `naive_lag21` |
-| Feature engineering | Adham | ✅ Done (lags 16/21/28, rolling 7/28 shifted by 16); leakage check with Sara still to do |
-| Split dates | Sara | ✅ Done — agreed train / validation / test dates in `src/config.py`, used by `feature_engineering.py` and `train_models.py` |
-| Shared split function, scores (MAE / RMSE / WAPE) and MLflow helpers | Sara | ⏳ Not yet |
-| Linear, Random Forest, XGBoost | Hazem, Adham, Sara | 🟡 First versions in `src/train_models.py` use the agreed split; must move to MAE / RMSE / WAPE |
-| Polynomial Regression | Zenab | ⏳ Not yet |
-| Model comparison, error analysis, final test score | Sara, Yussuf | ⏳ Not yet |
+| Suspected data errors (`qc_sales_suspect`, `sales_capped`) | Zenab | ✅ Done |
+| Feature engineering | Adham, Zenab | ✅ Done (lags 16/21/28, rolling 7/28 shifted by 16, holiday distance) |
+| Leakage check | Zenab | ✅ Done — `src/leakage_check.py` |
+| Split dates | Sara | ✅ Done — agreed train / validation / test dates in `src/config.py`, used by every script |
+| Scores (MAE / RMSE / WAPE) and MLflow logging | Sara, Zenab | ✅ Done — every model logs `val_mae`, `val_rmse`, `val_wape` to the `stockwise-ai` experiment |
+| Linear, Random Forest, XGBoost | Hazem, Adham, Sara | ✅ Done — `src/train_models.py` (XGBoost early stopping on training data only) |
+| Polynomial Regression | Zenab | ✅ Done — `src/train_polynomial.py` |
+| Model comparison and error analysis | Sara, Zenab | ✅ Done — `src/final_comparison.py`, `src/residual_analysis.py` |
+| Final test score of the best model | Yussuf | ⏳ Not yet |
 
 ---
 

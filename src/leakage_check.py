@@ -104,7 +104,7 @@ def run_leakage_check(save_report: bool = True) -> bool:
               not same(later_a["sales_lag_16"], later_b["sales_lag_16"]))
 
     rep.section("Model feature lists must not contain sales, ids, dates or qc_ flags")
-    for module_name, attr_names in (("train_models_new", ["FEATURE_COLS"]), ("train_polynomial", ["FEATURES", "EXTRA_FEATURES"])):        
+    for module_name, attr_names in (("train_models", ["FEATURE_COLS"]), ("train_polynomial", ["FEATURES", "EXTRA_FEATURES"])):        
         try:
             module = importlib.import_module(module_name)
             cols = [c for a in attr_names for c in getattr(module, a)]

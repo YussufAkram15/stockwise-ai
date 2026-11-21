@@ -26,8 +26,7 @@ from data_io import setup_console
 
 KEY = ["store_nbr", "family"]
 HORIZON_DAYS = 16
-LAG_DAYS = [16, 21, 28, 35, 42]
-SAME_WEEKDAY_LAGS = [21, 28, 35, 42]
+LAG_DAYS = [16, 21, 28]          # the agreed lags (16 = horizon; 21, 28 = same weekday)
 ROLL_WINS = [7, 28]
 HOLIDAY_CAP = 30
 STORE_TYPE_MAP = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
@@ -210,12 +209,6 @@ def add_lag_features(df: pd.DataFrame) -> pd.DataFrame:
             df, HISTORY_COL, lag, tolerance_days=1
         ).astype("float32")
 
-    df["sales_same_weekday_mean"] = (
-        df[[f"sales_lag_{lag}" for lag in SAME_WEEKDAY_LAGS]]
-        .mean(axis=1)
-        .astype("float32")
-    )
-
     print("  Computing promotion and oil lags ...")
     # Promotion/oil values are date-level known observations. The same
     # one-day tolerance protects against an isolated missing calendar date.
@@ -384,7 +377,6 @@ def new_feature_columns(df: pd.DataFrame) -> list[str]:
             "is_payday", "days_to_next_holiday", "days_since_last_holiday",
         ],
         [f"sales_lag_{lag}" for lag in LAG_DAYS]
-        + ["sales_same_weekday_mean"]
         + [f"sales_roll_{window}_mean" for window in ROLL_WINS],
         [
             "promo_lag_7", "promo_roll_7_mean",

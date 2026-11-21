@@ -60,13 +60,11 @@ QC_COLS = ["qc_zero_series", "qc_before_first_sale"]
 SUSPECT_COL = "qc_sales_suspect"      # extreme AND unexplained by holiday/event/promo: removed from training
 OUTLIER_COL = "qc_sales_outlier"    # only used with --exclude-outliers (an experiment, not the agreed default)
 
-# Split. config.VAL_END on main is still 2017-08-15 (wrong, it swallows the test slice).
-# Until Sara fixes it we use the agreed dates here.
-# TODO when Sara pushes the fix: delete these 3 lines and use config.TRAIN_END / VAL_START / VAL_END.
-TRAIN_END = "2017-06-30"
-VAL_START = "2017-07-01"
-VAL_END = "2017-07-30"
-TEST_START = "2017-07-31"          # 31 Jul -> 15 Aug is the TEST slice: never touched here
+# Split: the agreed dates, read from src/config.py (one place for the whole team).
+TRAIN_END = config.TRAIN_END
+VAL_START = config.VAL_START
+VAL_END = config.VAL_END
+TEST_START = config.TEST_START     # 31 Jul -> 15 Aug is the TEST slice: never touched here
 
 NAIVE_BASELINE_WAPE = 17.50        # Yussuf's naive baseline on validation (the number to beat)
 
@@ -142,11 +140,6 @@ def load_and_split(features: list[str], exclude_outliers: bool = False) -> tuple
         raise SystemExit("Validation overlaps the test slice - stop.")
     if train[TARGET].isna().any() or val[TARGET].isna().any():
         raise SystemExit("Missing sales in train/validation rows - check the feature table.")
-
-    cfg_val_end = getattr(config, "VAL_END", None)
-    if cfg_val_end is not None and str(cfg_val_end)[:10] != VAL_END:
-        print(f"NOTE: config.VAL_END = {str(cfg_val_end)[:10]} differs from the agreed {VAL_END}. "
-              f"Using {VAL_END}.")
     return train.reset_index(drop=True), val.reset_index(drop=True)
 
 

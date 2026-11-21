@@ -31,12 +31,12 @@ sys.path.insert(0, str(HERE))
 import config
 from data_io import missing_required_files, setup_console
 
-STEPS = ["prepare_data", "feature_engineering", "leakage_check", "train_models_new", "train_polynomial", "final_comparison"]
+STEPS = ["prepare_data", "feature_engineering", "leakage_check", "train_models", "train_polynomial", "final_comparison"]
 
 
 def step_args(step: str, args: argparse.Namespace) -> list[str]:
     extra: list[str] = []
-    if step in ("train_models_new", "train_polynomial") and args.no_mlflow:
+    if step in ("train_models", "train_polynomial") and args.no_mlflow:
         extra.append("--no-mlflow")
     if step == "train_models" and args.models:
         extra += ["--models", *args.models]
