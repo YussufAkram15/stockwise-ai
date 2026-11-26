@@ -1,0 +1,12 @@
+# Keep the Docker build small: the image only needs app/ and deploy/
+.git/
+.venv/
+data/
+models/
+notebooks/
+docs/
+reports/
+src/
+mlruns/
+mlflow.db*
+**/__pycache__/
