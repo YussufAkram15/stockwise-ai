@@ -22,6 +22,7 @@ This is the DEPI Machine Learning capstone of a five-person team. This README is
 12. [Team and status](#12-team-and-status)
 13. [Limitations and next steps](#13-limitations-and-next-steps)
 14. [Technologies used](#14-technologies-used)
+15. [Deploy on AWS (Level 4)](#15-deploy-on-aws-level-4)
 
 ---
 
@@ -399,6 +400,7 @@ stockwise-ai/
 │   └── inventory.py          ← Level 2: reorder advice per store × family
 ├── app/
 │   └── dashboard.py          ← Level 3: the dashboard (streamlit run app/dashboard.py)
+├── deploy/                   ← Level 4: Dockerfile, AWS boot script, copy of the dashboard's 5 result files
 ├── requirements.txt          ← exact library versions
 └── README.md
 ```
@@ -629,6 +631,7 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 | Final test score of the best model | Yussuf | ✅ Done — Random Forest, test WAPE 15.87% (baseline 19.85%), `src/test_best_model.py` |
 | Level 2 — reorder advice | Yussuf | ✅ Done — `src/forecast_best_model.py`, `src/inventory.py` (stock simulated) |
 | Level 3 — dashboard (without the AI assistant) | Yussuf | ✅ Done — `app/dashboard.py` |
+| Level 4 — deployment (Docker on AWS EC2) | Yussuf, Adham | 🔄 Files ready in `deploy/`, see section 15 |
 
 ---
 
@@ -638,7 +641,7 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 
 - The best model is trained on data up to 2017-06-30; for the real 16-day forecast it could be retrained on all data up to 2017-08-15.
 - Level 3 — the AI assistant (a ready-made LLM that answers questions by reading our output tables).
-- Level 4 — deployment on the cloud (Docker + AWS).
+- Level 4 for production: push the image to Amazon ECR and run it on ECS Fargate (HTTPS, no server to manage).
 
 **Limitations:**
 
@@ -661,3 +664,57 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 | MLflow | Experiment logbook |
 | Jupyter | The baseline notebook |
 | Git and GitHub | Version control and team review |
+| Streamlit, Altair | The dashboard and its charts |
+| Docker, AWS EC2 | Deployment (Level 4) |
+
+---
+
+## 15. Deploy on AWS (Level 4)
+
+**What goes online:** only the dashboard. The model runs offline on our laptops (batch). The dashboard reads 5 result files (1.4 MB), so the server needs no model, no raw data and no training libraries.
+
+**How it works:**
+
+1. `deploy/data/` holds a copy of the 5 files the dashboard reads (`reports/*.parquet` is not in Git, so the server could not get them otherwise).
+2. `deploy/Dockerfile` builds a small image: Python 3.12 + Streamlit + the dashboard + those 5 files.
+3. `deploy/ec2-user-data.sh` runs by itself when an EC2 server starts: it installs Docker and Git, clones this repository (`main`), builds the image and starts it on port 8501.
+4. A **security group** opens only port 8501 to the internet.
+
+```text
+GitHub (main) ──git clone──▶ EC2 t3.micro ──docker build──▶ container :8501 ──▶ http://<public-ip>:8501
+```
+
+**Cost:** a `t3.micro` server + public IP + 8 GB disk is about $0.02 per hour, **under $1 per day of use**. We start it only for testing and for the demo, then terminate it ($0 when nothing runs).
+
+### One-time setup (AWS console)
+
+1. **Billing alert:** Billing → Budgets → create a monthly budget of **$5** with an e-mail alert. Work as an IAM user, not the root user.
+2. **Region:** Europe (Frankfurt) `eu-central-1`.
+3. **Security group** (EC2 → Security Groups → Create) named `stockwise-sg`: inbound rule *Custom TCP*, port **8501**, source `0.0.0.0/0`. Optional: SSH port 22 from *My IP* only.
+4. **Launch template** (EC2 → Launch Templates → Create) named `stockwise-dashboard`:
+   - AMI: **Amazon Linux 2023**, instance type **t3.micro**, storage **8 GB gp3**
+   - Network settings: security group `stockwise-sg`, *Auto-assign public IP* = **Enable**
+   - Advanced details → **User data**: paste the whole content of `deploy/ec2-user-data.sh`
+
+### Start, check, stop
+
+1. EC2 → Launch Templates → `stockwise-dashboard` → **Launch instance from template**.
+2. Wait about **5 minutes** (the server installs Docker and builds the image).
+3. Copy the instance's **Public IPv4 address** and open `http://<public-ip>:8501` (http, not https).
+4. When finished: EC2 → Instances → select it → **Instance state → Terminate**. Check that no instance is left running.
+
+If the page does not open after 10 minutes: connect with EC2 Instance Connect and run `sudo tail -50 /var/log/cloud-init-output.log` and `sudo docker ps`.
+
+### Update the results
+
+After re-running the pipeline (`src/run_pipeline.py` → `src/forecast_best_model.py` → `src/inventory.py`):
+
+```bash
+bash deploy/refresh_data.sh
+```
+
+Commit `deploy/data/`, merge to `main`, then launch a new server from the template. It always builds from the latest `main`.
+
+### Next step for production
+
+Push the image to **Amazon ECR** and run it on **ECS Fargate** behind a load balancer with HTTPS: no server to manage, and it restarts by itself.
