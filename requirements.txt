@@ -23,3 +23,4 @@ joblib==1.6.0          # saves the best trained model (models/best_model.pkl)
 
 # Dashboard (Level 3)
 streamlit==1.67.0
+altair==6.3.0          # charts in the dashboard (also pinned in deploy/requirements-app.txt)

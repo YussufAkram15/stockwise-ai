@@ -51,4 +51,4 @@ Model feature lists must not contain sales, ids, dates or qc_ flags
 ==============================================================================
 FINAL RESULT
 ==============================================================================
-NO LEAKAGE FOUND: every feature uses only information that is at least 16 days old.
+NO LEAKAGE FOUND: every sales and oil feature uses only information that is at least 16 days old (promotion and calendar features are known in advance).

@@ -11,6 +11,8 @@ How the proof works (a "perturbation test"):
      up to TRAIN_END + 15 days must be IDENTICAL in both runs. If even one differs, that feature
      peeked at the future (a leak) and the check FAILS.
   4. As a control, later rows MUST change, otherwise the test itself would be blind.
+  Scope: the features built in feature_engineering.py. Columns used as they come from prepare_data.py
+  (store, cluster, onpromotion, holiday flags) are known in advance and are not perturbed.
 It also checks that the model feature lists never contain sales, ids, dates or qc_ flags.
 
 Result: printed and saved to reports/leakage_report.txt  (exit code 1 if anything fails).
@@ -115,7 +117,7 @@ def run_leakage_check(save_report: bool = True) -> bool:
             rep.add(f"[SKIP] {module_name}: could not be loaded ({exc!r})")
 
     rep.section("FINAL RESULT")
-    rep.add("NO LEAKAGE FOUND: every feature uses only information that is at least 16 days old." if fails == 0
+    rep.add("NO LEAKAGE FOUND: every sales and oil feature uses only information that is at least 16 days old (promotion and calendar features are known in advance)." if fails == 0
             else f"LEAKAGE or problems found: {fails} check(s) failed. Fix the FAIL lines above.")
     if save_report:
         rep.save(config.REPORTS_DIR / "leakage_report.txt")

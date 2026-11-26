@@ -2,7 +2,7 @@
 
 StockWise AI predicts **how many units each supermarket store will sell of each product family, for each of the next 16 days**. It uses four and a half years of real daily sales from a supermarket chain in Ecuador, together with promotions, holidays, oil prices and store information.
 
-This is the DEPI Machine Learning capstone of a five-person team. This README is written so that **someone who has never seen the project** can understand what it does, why it is built this way, and run it on their own computer.
+This is the DEPI AWS Machine Learning capstone of a five-person team. This README is written so that **someone who has never seen the project** can understand what it does, why it is built this way, and run it on their own computer.
 
 ---
 
@@ -147,7 +147,7 @@ One model with the same columns is used for all 16 days, so a clue must exist fo
 10. Score the best model on the test period once  src/test_best_model.py
 ```
 
-Steps 2 → 9 run with **one command**: `python src/run_pipeline.py` (see section 9).
+One command, `python src/run_pipeline.py`, runs cleaning + validation, features, the leakage check, all models and the comparison (steps 2, 3, 6, 7, 8 and the comparison in 9). EDA (4), the baseline notebook (5) and `residual_analysis.py` (9) are run on their own (see section 9).
 
 All paths and team rules live in one file, `src/config.py`, so every script uses the same settings.
 
@@ -171,7 +171,7 @@ What it does:
    - `transferred = True` → the holiday was **moved away** from that date, so that date is a **normal day**; the new date appears as type `Transfer`.
 
    National holidays apply to all stores, regional ones to stores in that state, local ones to stores in that city. Result: 7 calendar flags (`is_holiday`, `is_holiday_national`, `is_holiday_regional`, `is_holiday_local`, `is_event`, `is_earthquake`, `is_work_day`).
-4. **Quality-control (QC) flags**, computed only from data up to **2017-06-30** (the end of the training period, so nothing from validation or test leaks in):
+4. **Quality-control (QC) flags**: their limits and statistics are learned only from data up to **2017-06-30** (the end of the training period, so nothing from validation or test leaks in), then applied to every day:
 
    | Flag | Meaning | Share of rows |
    |---|---|---|
@@ -190,7 +190,7 @@ Report with every decision: `reports/cleaning_report.md`.
 
 ### 4.3 Validate — `src/validate_data.py`
 
-A second, independent check. It re-reads the raw files and recomputes everything (row counts, ids, unchanged sales, complete calendar grid, oil filling, holiday flags, QC flags) instead of trusting the cleaning code. Each check prints `PASS`, `WARN` or `FAIL`. The latest run has **0 FAIL** and one expected `WARN`: 1 January 2017 is not a holiday in the official file (it was transferred), even though stores were closed — `qc_store_closed_day` catches that day.
+A second, independent check. It re-reads the raw files and recomputes everything (row counts, ids, unchanged sales, complete calendar grid, oil filling, holiday flags, QC flags) instead of trusting the cleaning code. Each check prints `PASS`, `WARN` or `FAIL`. The latest run has **0 FAIL** and one expected `WARN`: 1 January 2017 is not a holiday in the official file (it was transferred), even though almost all stores were closed — `qc_store_closed_day` flags 53 of the 54 stores that day.
 Report: `reports/validation_report.txt`.
 
 ### 4.4 Explore the data — `src/eda.py`
@@ -294,7 +294,7 @@ A Streamlit web page that only **reads** the files above (no training, no raw da
 
 - **Overview** — how many series need REORDER / OK / OVERSTOCK, the 10 most urgent items, the total forecast per day.
 - **Forecast** — pick a store and a family: the last 60 days of real sales, then the 16-day forecast, and its stock advice.
-- **Reorder table** — filter by status, store, family and "runs out before", download as CSV. Answers questions like *"which stores may run out of BEVERAGES next week?"*.
+- **Reorder table** — filter by status, store, family and "runs out before", download as CSV. Answers questions like *"which stores must order BEVERAGES now?"* (status REORDER) or *"which stores may run out of BEVERAGES next week if nothing is ordered?"* (status REORDER + OK, runs out before 2017-08-23).
 - **Model accuracy** — the comparison table of all models against the baseline, and real vs predicted in July for any series.
 
 ---
@@ -357,7 +357,7 @@ Random Forest was chosen on validation, retrained on everything up to 2017-07-30
 
 *Read it as: "on 16 days the model never saw, its total error is 15.9% of all units sold — 20% less error than copying the past."*
 
-The test period is harder than validation for **every** model (the baseline also goes from 17.50% to 19.85%): it contains the start-of-month payday days (1–2 August) and the national holiday of 10–11 August, which are harder to forecast than the normal July days used for validation.
+The test period is harder than validation for **both** the model and the baseline (the baseline also goes from 17.50% to 19.85%; only these two are scored on test): it contains the start-of-month payday days (1–2 August) and the national holiday of 10–11 August, which are harder to forecast than the normal July days used for validation.
 
 ---
 
@@ -378,6 +378,11 @@ stockwise-ai/
 │   ├── validation_report.txt
 │   ├── feature_report.md
 │   ├── naive_baseline_metrics.csv
+│   ├── leakage_report.txt
+│   ├── model_comparison.md / .csv ← scores of every model on validation
+│   ├── residual_analysis.md  ← where the best model is wrong
+│   ├── test_result.md / .json← the one-time test score
+│   ├── reorder_table.csv     ← Level 2: advice per store × family (+ inventory_summary.md)
 │   ├── eda/                  ← 9 EDA charts + eda_notes.md
 │   └── figures/              ← model charts
 ├── src/
@@ -393,7 +398,7 @@ stockwise-ai/
 │   ├── train_polynomial.py   ← step 8 (Polynomial)
 │   ├── final_comparison.py   ← step 9 (one table for all models + charts)
 │   ├── residual_analysis.py  ← step 9 (where the best model is wrong)
-│   ├── run_pipeline.py       ← runs steps 2 → 9 with one command
+│   ├── run_pipeline.py       ← runs cleaning → comparison with one command
 │   ├── test_best_model.py    ← step 10 (the best model on the test period, once)
 │   ├── forecast_best_model.py← Level 2: 16-day forecast with the best model
 │   ├── forecast_naive.py     ← Level 2: the same files with the naive baseline
@@ -584,6 +589,10 @@ Open the link it prints (usually <http://127.0.0.1:5000>). `mlflow.db` is create
 | 6 | `reports/model_comparison.md`, `reports/model_comparison.csv`, `reports/figures/*.png` | One table for all models, plus charts |
 | 6 | `reports/residual_analysis.md`, `reports/figures/res_*.png` | Where the best model is wrong |
 | 7 | `reports/test_result.md`, `reports/test_result.json` | The final test score of the best model |
+| Level 2 | `reports/forecast_16d.parquet`, `reports/recent_sales.parquet`, `reports/val_predictions.parquet` | 16-day forecast, last 60 real days, July predictions (`forecast_best_model.py`; parquet not in Git) |
+| Level 2 | `reports/reorder_table.csv`, `reports/inventory_summary.md` | Reorder advice per store × family (`inventory.py`) |
+| Level 3 | `app/dashboard.py` | The dashboard, reads the files above |
+| Level 4 | `deploy/data/` | Copy of the 5 files the dashboard reads, for the Docker image (`deploy/refresh_data.sh`) |
 
 Generated data and models are **not** committed: anyone can re-create them by running the steps above.
 
@@ -690,10 +699,11 @@ GitHub (main) ──git clone──▶ EC2 t3.micro ──docker build──▶ 
 
 1. **Billing alert:** Billing → Budgets → create a monthly budget of **$5** with an e-mail alert. Work as an IAM user, not the root user.
 2. **Region:** Europe (Frankfurt) `eu-central-1`.
-3. **Security group** (EC2 → Security Groups → Create) named `stockwise-sg`: inbound rule *Custom TCP*, port **8501**, source `0.0.0.0/0`. Optional: SSH port 22 from *My IP* only.
+3. **Security group** (EC2 → Security Groups → Create) named `stockwise-sg`: inbound rule *Custom TCP*, port **8501**, source `0.0.0.0/0`. No SSH rule is needed (see the troubleshooting step below if something goes wrong).
 4. **Launch template** (EC2 → Launch Templates → Create) named `stockwise-dashboard`:
    - AMI: **Amazon Linux 2023**, instance type **t3.micro**, storage **8 GB gp3**
-   - Network settings: security group `stockwise-sg`, *Auto-assign public IP* = **Enable**
+   - Network settings: Subnet = *Don't include in launch template*; Firewall → *Select existing security group* → `stockwise-sg`.
+     Do **not** add a network interface under *Advanced network configuration*: the default network already gives the server a public IP, and setting the security group in two places makes the launch fail.
    - Advanced details → **User data**: paste the whole content of `deploy/ec2-user-data.sh`
 
 ### Start, check, stop
@@ -703,7 +713,11 @@ GitHub (main) ──git clone──▶ EC2 t3.micro ──docker build──▶ 
 3. Copy the instance's **Public IPv4 address** and open `http://<public-ip>:8501` (http, not https).
 4. When finished: EC2 → Instances → select it → **Instance state → Terminate**. Check that no instance is left running.
 
-If the page does not open after 10 minutes: connect with EC2 Instance Connect and run `sudo tail -50 /var/log/cloud-init-output.log` and `sudo docker ps`.
+If the page does not open after 10 minutes:
+
+1. Check that the instance has a **Public IPv4 address** and that you typed `http://` (not `https://`) and `:8501`.
+2. EC2 → Instances → select it → **Actions → Monitor and troubleshoot → Get system log**. The end of the log shows the boot script's steps (Docker install, `git clone`, `docker build`) and the first error, if any.
+3. Still unclear: in `stockwise-sg` add an inbound rule *SSH*, port 22, source = the prefix list `com.amazonaws.eu-central-1.ec2-instance-connect` (AWS's own Instance Connect addresses; no key pair needed). Then select the instance → **Connect → EC2 Instance Connect** and run `sudo tail -50 /var/log/cloud-init-output.log` and `sudo docker ps`. Remove the rule afterwards.
 
 ### Update the results
 

@@ -9,7 +9,7 @@
     "train_end": "2017-06-30",
     "val_start": "2017-07-01",
     "val_end": "2017-07-30",
-    "qc_filter_train": "qc_zero_series=0 and qc_before_first_sale=0",
+    "qc_filter_train": "qc_zero_series=0 and qc_before_first_sale=0 and qc_sales_suspect=0",
     "exclude_outliers": false,
     "more_clues": false,
     "log_target": false,

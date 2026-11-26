@@ -43,18 +43,14 @@
   "best_model": "RandomForest",
   "best_model_rule": "lowest validation WAPE among official models",
   "main_metric": "WAPE",
-  "forecast_score_definition": "100 - WAPE; not classification accuracy",
   "models": [
     {
       "name": "LinearRegression",
       "kind": "model",
-      "rmsle": 1.5026385690007567,
       "scores": {
         "val_mae": 86.77410040831774,
         "val_rmse": 269.5338311070482,
-        "val_wape": 17.75629929204575,
-        "val_rmsle": 1.5026385690007567,
-        "val_forecast_score": 82.24370070795425
+        "val_wape": 17.75629929204575
       },
       "time_s": 7.438540697097778,
       "features": [
@@ -129,13 +125,10 @@
     {
       "name": "RandomForest",
       "kind": "model",
-      "rmsle": 0.8535124163763135,
       "scores": {
         "val_mae": 62.30144597837007,
         "val_rmse": 219.29848827042065,
-        "val_wape": 12.748540358398461,
-        "val_rmsle": 0.8535124163763135,
-        "val_forecast_score": 87.25145964160154
+        "val_wape": 12.748540358398461
       },
       "time_s": 158.2611644268036,
       "features": [
@@ -226,13 +219,10 @@
     {
       "name": "XGBoost",
       "kind": "model",
-      "rmsle": 0.4536585545505626,
       "scores": {
         "val_mae": 67.46782950957953,
         "val_rmse": 260.2031409291081,
-        "val_wape": 13.805720459442275,
-        "val_rmsle": 0.4536585545505626,
-        "val_forecast_score": 86.19427954055773
+        "val_wape": 13.805720459442275
       },
       "time_s": 227.60027956962585,
       "features": [
