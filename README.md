@@ -369,7 +369,7 @@ stockwise-ai/
 ├── data/
 │   ├── raw/                  ← you put the Kaggle CSV files here (not in Git)
 │   └── processed/            ← created by the scripts (not in Git)
-├── docs/                     ← project documents: version_1 (31 Oct), version_2 (21 Nov) and final (27 Nov: PDFs + infographic)
+├── docs/                     ← project documents: version_1 (31 Oct: proposal, planning, literature review, requirements) and final (27 Nov: all 6 documents + infographic)
 ├── models/                   ← saved trained models, created by train_models.py (not in Git)
 ├── notebooks/
 │   └── 02_naive_baseline_yussuf.ipynb
