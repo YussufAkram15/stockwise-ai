@@ -174,9 +174,12 @@ elif page == "Forecast":
                  alt.Tooltip("high:Q", title="to", format=",.1f")],
     )
 
+    # Axis from 0; a series with no sales at all gets a 0-1 axis instead of a collapsed one
+    no_sales = both["units"].max() == 0 and sigma == 0
+    y_scale = alt.Scale(domain=[0, 1]) if no_sales else alt.Scale(domainMin=0)
     lines = alt.Chart(both).mark_line(point=True).encode(
         x=alt.X("date:T", title=None),
-        y=alt.Y("units:Q", title="units sold"),
+        y=alt.Y("units:Q", title="units sold", scale=y_scale),
         color=alt.Color("line:N", title=None, scale=alt.Scale(
             domain=["actual sales", "forecast"], range=["#4c78a8", "#f58518"])),
         strokeDash=alt.StrokeDash("line:N", legend=None),
@@ -184,6 +187,10 @@ elif page == "Forecast":
     )
     today = alt.Chart(pd.DataFrame({"date": [TODAY]})).mark_rule(color="grey", strokeDash=[4, 4]).encode(x="date:T")
     st.altair_chart((area + lines + today).properties(height=380), width="stretch")
+    last28 = actual[actual["date"] > TODAY - pd.Timedelta(days=28)]["units"].sum()
+    if len(future) and future["units"].sum() == 0 and last28 == 0:
+        st.info("No sales in the last 28 days, so the forecast is 0 (zero rule): "
+                "a series that stopped selling is not expected to start again by itself.")
     st.caption(f"Grey dashed line = today (2017-08-15). Left of it: real sales. Right of it: the model's forecast. "
                f"Shaded band = forecast ± {sigma:,.1f} units, the usual daily error of this series in July "
                f"(the same error that sets the safety stock).")
@@ -267,6 +274,14 @@ else:
         )
         rule = alt.Chart(pd.DataFrame({"x": [BASELINE_WAPE]})).mark_rule(color="grey", strokeDash=[4, 4]).encode(x="x:Q")
         st.altair_chart((bars + rule).properties(height=220), width="stretch")
+
+    if val is not None:
+        rule_wape = 100 * (val["sales"] - val["prediction"]).abs().sum() / val["sales"].sum()
+        st.caption(f"Zero rule (Level 2): a store × family with no sales in the 28 days before the cutoff gets "
+                   f"a forecast of 0. The model alone never learned this, because never-sold series were left "
+                   f"out of training. With the rule, {MODEL}'s validation WAPE is **{rule_wape:.2f}%**. "
+                   f"The forecast, the reorder table and the chart below use the rule; the scores above "
+                   f"are the model alone.")
 
     if val is not None:
         st.subheader(f"{MODEL}: real vs predicted in July for one series")

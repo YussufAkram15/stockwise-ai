@@ -14,9 +14,11 @@ The formulas (docs: technical guide, section 11)
     safety_stock   = Z * sigma * sqrt(lead_time)          Z = 1.65 -> about 95% service level
     reorder_point  = average daily forecast * lead_time + safety_stock
     order_up_to    = 16-day forecast + safety_stock
-    status         = REORDER    if on_hand <= reorder_point
+    status         = REORDER    if on_hand <= reorder_point   (and the 16-day forecast is above 0)
                      OVERSTOCK  if on_hand >  order_up_to
                      OK         otherwise
+                     (a series forecast at 0 by the zero rule in forecast_best_model.py
+                      is never REORDER: nothing is expected to sell, so nothing is ordered)
     order_qty      = order_up_to - on_hand   (only when REORDER)
 
 IMPORTANT: the Favorita data has NO stock levels and NO lead times. Both are
@@ -101,7 +103,8 @@ def apply_policy(table: pd.DataFrame) -> pd.DataFrame:
     table["reorder_point"] = table["avg_daily_forecast"] * table["lead_time_days"] + table["safety_stock"]
     table["order_up_to"] = table["forecast_16d"] + table["safety_stock"]
 
-    reorder = (table["reorder_point"] > 0) & (table["on_hand"] <= table["reorder_point"])
+    # No forecast sales (zero rule) -> no order, even if a safety stock was computed from July errors
+    reorder = (table["forecast_16d"] > 0) & (table["on_hand"] <= table["reorder_point"])
     overstock = table["on_hand"] > table["order_up_to"]
     table["status"] = np.select([reorder, overstock], ["REORDER", "OVERSTOCK"], default="OK")
     table["order_qty"] = np.where(reorder, np.ceil(table["order_up_to"] - table["on_hand"]), 0)

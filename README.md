@@ -271,13 +271,14 @@ None of these scripts touches the test period.
 A forecast only helps if it turns into a decision: **"should this store reorder this product now?"**
 
 1. `forecast_best_model.py` takes the best model (`models/best_model.pkl`, today Random Forest) and forecasts the next 16 days (2017-08-16 → 08-31) for every store × family, plus its validation predictions. (`forecast_naive.py` writes the same files with the naive baseline, so Level 2 also works without trained models.)
+   **Zero rule:** a store × family that sold nothing in the 28 days before "today" gets a forecast of 0. The model alone never learned this: training leaves out never-sold rows, so for a dead series it guesses sales that never come (store 52 BOOKS never sold, yet the model predicted ~170 a day in July). Checked a year earlier: of 168 series with no sales in the 28 days before 2016-08-15, only 5 sold anything in the next 16 days (22 units). With the rule, the validation WAPE goes from 12.75% to 12.35%; the model scores in section 6 are the model alone.
 2. `inventory.py` applies standard stock formulas to every series:
 
 ```text
 sigma          = how much the forecast usually misses per day (from the validation errors)
 safety_stock   = 1.65 × sigma × √lead_time          (1.65 → enough 95% of the time)
 reorder_point  = average daily forecast × lead_time + safety_stock
-status         = REORDER    if stock on hand ≤ reorder_point
+status         = REORDER    if stock on hand ≤ reorder_point (and the 16-day forecast > 0)
                  OVERSTOCK  if stock on hand > 16-day forecast + safety_stock
                  OK         otherwise
 order_qty      = 16-day forecast + safety_stock − stock on hand   (when REORDER)
@@ -656,6 +657,7 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 - Stock levels and lead times in Level 2 are simulated: the dataset has none.
 - Sudden one-day jumps (e.g. a cleaning-products order 10× the usual) cannot be predicted from past sales; they cause the biggest single errors.
 - Holidays are harder than normal days (WAPE 19.9% vs 12.7%).
+- The model alone predicts sales for series that stopped selling (it never saw them in training); Level 2 fixes this with the zero rule (section 4.8). Retraining with those rows kept would fix it inside the model.
 
 ---
 
