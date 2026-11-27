@@ -12,9 +12,9 @@ Forecast model: `RandomForest` · horizon 2017-08-16 → 2017-08-31 (16 days) ·
 ## Result
 | Status | Series |
 |---|---|
-| REORDER | 368 |
-| OK | 661 |
-| OVERSTOCK | 753 |
+| REORDER | 348 |
+| OK | 735 |
+| OVERSTOCK | 699 |
 
 ## Ten most urgent (earliest expected stockout)
 | Store | Family | On hand | Reorder point | Runs out on | Order qty |
@@ -34,8 +34,8 @@ Forecast model: `RandomForest` · horizon 2017-08-16 → 2017-08-31 (16 days) ·
 - GROCERY II: 16 stores
 - LINGERIE: 16 stores
 - SEAFOOD: 15 stores
-- BABY CARE: 15 stores
 - MAGAZINES: 14 stores
+- HOME AND KITCHEN II: 14 stores
 
 Slow sellers (a few units a day, sold irregularly) get REORDER often: their safety
 stock is large compared with their daily sales, because their forecast error is large
