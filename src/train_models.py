@@ -182,16 +182,6 @@ def wape(actual: np.ndarray, pred: np.ndarray) -> float:
     )
 
 
-def rmsle(actual: np.ndarray, pred: np.ndarray) -> float:
-    return float(
-        np.sqrt(
-            np.mean(
-                (np.log1p(pred) - np.log1p(actual)) ** 2
-            )
-        )
-    )
-
-
 def all_metrics(
     actual: np.ndarray,
     pred: np.ndarray
@@ -204,15 +194,9 @@ def all_metrics(
         "val_mae": mae(actual, p),
         "val_rmse": rmse(actual, p),
         "val_wape": wape(actual, p),
-        "val_rmsle": rmsle(actual, p),
     }
 
-    # WAPE-based forecasting score.
-    # This is NOT classification accuracy.
-    scores["val_forecast_score"] = (
-        100.0 - scores["val_wape"]
-    )
-
+    # Only the three metrics the team agreed on: MAE, RMSE, WAPE.
     return scores
 
 
@@ -873,11 +857,6 @@ def train_one(
     print("-" * 60)
 
     print(
-        f"Forecast Score : "
-        f"{scores['val_forecast_score']:.2f}%"
-    )
-
-    print(
         f"WAPE           : "
         f"{scores['val_wape']:.2f}%"
     )
@@ -890,11 +869,6 @@ def train_one(
     print(
         f"RMSE           : "
         f"{scores['val_rmse']:.3f}"
-    )
-
-    print(
-        f"RMSLE          : "
-        f"{scores['val_rmsle']:.4f}"
     )
 
     print(
@@ -1105,10 +1079,6 @@ def save_artifacts(
 
         "main_metric": "WAPE",
 
-        "forecast_score_definition": (
-            "100 - WAPE; not classification accuracy"
-        ),
-
         "models": [
 
             {
@@ -1116,10 +1086,6 @@ def save_artifacts(
                 "name": r["name"],
 
                 "kind": r["kind"],
-
-                "rmsle": float(
-                    r["scores"]["val_rmsle"]
-                ),
 
                 "scores": {
 
@@ -1179,14 +1145,6 @@ def save_artifacts(
         pred["sales"] -
         pred["predicted_sales"]
     ).abs()
-
-    pred["rmsle_row"] = (
-
-        np.log1p(pred["predicted_sales"]) -
-
-        np.log1p(pred["sales"])
-
-    ) ** 2
 
     pred.to_parquet(
         config.BEST_PREDICTIONS_PATH,
@@ -1460,15 +1418,11 @@ def main(
 
             f"{r['name']:<18}"
 
-            f" Score: {s['val_forecast_score']:7.2f}%"
-
-            f" | WAPE: {s['val_wape']:7.2f}%"
+            f" WAPE: {s['val_wape']:7.2f}%"
 
             f" | MAE: {s['val_mae']:10.3f}"
 
             f" | RMSE: {s['val_rmse']:10.3f}"
-
-            f" | RMSLE: {s['val_rmsle']:.4f}"
 
             f" | {r['kind']}"
 

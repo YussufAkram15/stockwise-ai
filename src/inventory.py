@@ -1,6 +1,6 @@
 """Level 2: turn the 16-day forecast into reorder advice for every store x family.
 
-Run from the project root (after a forecast exists, e.g. python src/forecast_naive.py):
+Run from the project root (after the forecast exists: python src/forecast_best_model.py):
     python src/inventory.py
 
 Reads  : reports/forecast_16d.parquet     next 16 days: date, store_nbr, family, forecast
@@ -40,7 +40,7 @@ KEYS = ["store_nbr", "family"]
 HORIZON = 16
 
 # Business assumptions (change them here, and only here)
-Z = 1.65                       # 95% service level: run out at most about 1 day in 20
+Z = 1.65                       # 95% cycle service level: stock runs short in about 1 order cycle in 20
 LEAD_TIME_DAYS = (2, 7)        # simulated delivery time per store, in days (min, max)
 COVER_DAYS = (0, 30)           # simulated stock on the shelf, in days of expected sales
 SEED = 42                      # fixed random seed -> same simulation every run
@@ -168,7 +168,7 @@ def main() -> int:
     setup_console()
     for path in (FORECAST_PATH, VAL_PREDICTIONS_PATH):
         if not path.exists():
-            print(f"{path.name} not found. Run first:  python src/forecast_naive.py")
+            print(f"{path.name} not found. Run first:  python src/forecast_best_model.py")
             return 1
 
     fc = load_forecast()

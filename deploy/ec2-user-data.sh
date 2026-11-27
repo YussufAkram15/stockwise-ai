@@ -4,6 +4,12 @@
 # Log: /var/log/cloud-init-output.log
 set -euxo pipefail
 
+# 1 GB of swap (spare memory on disk): t3.micro has only 1 GB RAM, and dnf + pip come close to it.
+fallocate -l 1G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+
 dnf install -y docker git
 systemctl enable --now docker
 

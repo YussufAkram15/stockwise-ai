@@ -235,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
         "train_end": TRAIN_END,
         "val_start": VAL_START,
         "val_end": VAL_END,
-        "qc_filter_train": "qc_zero_series=0 and qc_before_first_sale=0" + (" and qc_sales_outlier=0" if args.exclude_outliers else ""),
+        "qc_filter_train": "qc_zero_series=0 and qc_before_first_sale=0 and qc_sales_suspect=0" + (" and qc_sales_outlier=0" if args.exclude_outliers else ""),
         "exclude_outliers": args.exclude_outliers,
         "more_clues": args.more_clues,
         "log_target": args.log_target,
