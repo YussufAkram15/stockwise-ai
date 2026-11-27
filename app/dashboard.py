@@ -1,4 +1,4 @@
-"""StockWise AI dashboard (Level 3, without the chatbot).
+"""StockWise AI dashboard (Level 3).
 
 Run from the project root:
     streamlit run app/dashboard.py
@@ -9,9 +9,11 @@ It only READS files that the scripts already wrote (no training, no raw data):
     reports/val_predictions.parquet  the same model on July 2017       (forecast_best_model.py)
     reports/reorder_table.csv        REORDER / OK / OVERSTOCK advice   (inventory.py)
     reports/model_comparison.csv     validation scores of every model  (final_comparison.py)
+    reports/test_result.json         final test score of the best model (test_best_model.py)
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import altair as alt
@@ -46,11 +48,29 @@ def load_csv(name: str, **kwargs) -> pd.DataFrame | None:
     return pd.read_csv(path, **kwargs) if path.exists() else None
 
 
+@st.cache_data
+def load_json(name: str) -> dict | None:
+    path = REPORTS / name
+    return json.loads(path.read_text()) if path.exists() else None
+
+
 forecast = load_parquet("forecast_16d.parquet")
 recent = load_parquet("recent_sales.parquet")
 val = load_parquet("val_predictions.parquet")
 reorder = load_csv("reorder_table.csv", parse_dates=["stockout_date"])
 comparison = load_csv("model_comparison.csv")
+test = load_json("test_result.json")
+
+# One-sentence explanations, shown when you hover the (?) next to a number
+HELP = {
+    "on_hand": "Units in the store now. Simulated: the Favorita data has no stock levels.",
+    "reorder_point": "Order when stock falls to this level: the sales expected during the lead time "
+                     "plus the safety stock.",
+    "safety_stock": "Extra units kept in case sales are higher than the forecast "
+                    "(1.65 × usual error × √lead time, about 95% of order cycles without running out).",
+    "order_qty": "Units to order now to cover the next 16 days plus the safety stock. 0 when no order is needed.",
+    "stockout": "The first day the forecast sales use up the stock on hand, if nothing is ordered.",
+}
 
 if forecast is None or recent is None or reorder is None:
     st.error("The forecast or the reorder table is missing. " + HOW_TO_BUILD)
@@ -98,9 +118,11 @@ if page == "Overview":
         best_wape = float(best_wape.iloc[0]) if len(best_wape) else None
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Store × family series", f"{len(reorder):,}")
-    c2.metric("Need to REORDER", f"{counts['REORDER']:,}")
-    c3.metric("OVERSTOCK", f"{counts['OVERSTOCK']:,}")
+    c1.metric("Store × family series", f"{len(reorder):,}",
+              help="One series = one store and one product family (54 stores × 33 families).")
+    c2.metric("Need to REORDER", f"{counts['REORDER']:,}", help="Stock on hand is at or below the reorder point.")
+    c3.metric("OVERSTOCK", f"{counts['OVERSTOCK']:,}",
+              help="Stock on hand is more than the next 16 days of forecast sales plus the safety stock.")
     if best_wape is not None:
         c4.metric(f"{MODEL} validation WAPE", f"{best_wape:.2f}%",
                   delta=f"{best_wape - BASELINE_WAPE:.2f} pts vs baseline", delta_color="inverse")
@@ -142,6 +164,16 @@ elif page == "Forecast":
     future = pick(forecast)[["date", "forecast"]].rename(columns={"forecast": "units"}).assign(line="forecast")
     both = pd.concat([actual, future])
 
+    # Error band: forecast ± sigma (the usual daily forecast error of this series in validation)
+    row = pick(reorder)
+    sigma = float(row["sigma"].iloc[0]) if len(row) else 0.0
+    band = future.assign(low=(future["units"] - sigma).clip(lower=0), high=future["units"] + sigma)
+    area = alt.Chart(band).mark_area(opacity=0.25, color="#f58518").encode(
+        x="date:T", y="low:Q", y2="high:Q",
+        tooltip=["date:T", alt.Tooltip("low:Q", title="from", format=",.1f"),
+                 alt.Tooltip("high:Q", title="to", format=",.1f")],
+    )
+
     lines = alt.Chart(both).mark_line(point=True).encode(
         x=alt.X("date:T", title=None),
         y=alt.Y("units:Q", title="units sold"),
@@ -151,19 +183,21 @@ elif page == "Forecast":
         tooltip=["date:T", "line:N", alt.Tooltip("units:Q", format=",.1f")],
     )
     today = alt.Chart(pd.DataFrame({"date": [TODAY]})).mark_rule(color="grey", strokeDash=[4, 4]).encode(x="date:T")
-    st.altair_chart((lines + today).properties(height=380), width="stretch")
-    st.caption("Grey dashed line = today (2017-08-15). Left of it: real sales. Right of it: the model's forecast.")
+    st.altair_chart((area + lines + today).properties(height=380), width="stretch")
+    st.caption(f"Grey dashed line = today (2017-08-15). Left of it: real sales. Right of it: the model's forecast. "
+               f"Shaded band = forecast ± {sigma:,.1f} units, the usual daily error of this series in July "
+               f"(the same error that sets the safety stock).")
 
-    row = pick(reorder)
     if len(row):
         r = row.iloc[0]
         st.subheader(f"Stock advice: {r['status']}")
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("On hand (simulated)", f"{r['on_hand']:,.1f}")
-        c2.metric("Reorder point", f"{r['reorder_point']:,.1f}")
-        c3.metric("Safety stock", f"{r['safety_stock']:,.1f}")
-        c4.metric("Order quantity", f"{r['order_qty']:,.0f}")
-        c5.metric("Runs out on (if no order)", "—" if pd.isna(r["stockout_date"]) else str(r["stockout_date"].date()))
+        c1.metric("On hand (simulated)", f"{r['on_hand']:,.1f}", help=HELP["on_hand"])
+        c2.metric("Reorder point", f"{r['reorder_point']:,.1f}", help=HELP["reorder_point"])
+        c3.metric("Safety stock", f"{r['safety_stock']:,.1f}", help=HELP["safety_stock"])
+        c4.metric("Order quantity", f"{r['order_qty']:,.0f}", help=HELP["order_qty"])
+        c5.metric("Runs out on (if no order)", "—" if pd.isna(r["stockout_date"]) else str(r["stockout_date"].date()),
+                  help=HELP["stockout"])
         st.caption(f"\u2014 = does not run out within the 16 days · "
                    f"Lead time {r['lead_time_days']:.0f} days (simulated) · average forecast "
                    f"{r['avg_daily_forecast']:,.1f} units/day · usual forecast error (σ) {r['sigma']:,.1f}")
@@ -201,9 +235,24 @@ elif page == "Reorder table":
 # Page 4: Model accuracy
 # ---------------------------------------------------------------------------
 else:
-    st.title("Model accuracy (validation, July 2017)")
+    st.title("Model accuracy")
     st.write(f"A model is only useful if its validation WAPE is lower than the naive baseline "
              f"(**{BASELINE_WAPE:.2f}%**: copy the sales of 21 days earlier). Lower is better.")
+
+    if test is not None:
+        st.subheader("Final test: 16 days the model never saw")
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"{test['model']} test WAPE", f"{test['test_wape']:.2f}%",
+                  delta=f"{test['test_wape'] - test['naive_test_wape']:.2f} pts vs baseline", delta_color="inverse",
+                  help="Scored once, at the end, after the model was chosen on validation.")
+        c2.metric("Baseline test WAPE", f"{test['naive_test_wape']:.2f}%",
+                  help="Naive lag-21 baseline on the same 16 test days.")
+        c3.metric("Validation WAPE (July)", f"{test['validation_wape']:.2f}%",
+                  help="The same model on the validation month, used to choose it.")
+        st.caption(f"Test period {test['test_period'].replace('->', '→')}. The model was retrained on "
+                   f"train + validation, then scored on the test days once. Its error is higher than in "
+                   f"validation, but it still beats the baseline on the same days.")
+        st.subheader("Validation: every model, July 2017")
 
     if comparison is None:
         st.info("Model comparison not found. Run: python src/final_comparison.py")
