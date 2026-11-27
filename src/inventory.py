@@ -160,8 +160,8 @@ def write_summary(table: pd.DataFrame, fc: pd.DataFrame) -> None:
         "",
         "Slow sellers (a few units a day, sold irregularly) get REORDER often: their safety",
         "stock is large compared with their daily sales, because their forecast error is large",
-        "compared with their sales. A series with a zero forecast but a non-zero error still",
-        "keeps a small safety stock, so it can also show REORDER with a small quantity.",
+        "compared with their sales. A series forecast at 0 (no sales in the last 28 days, the",
+        "zero rule in forecast_best_model.py) is never REORDER: nothing is expected to sell.",
         "",
     ]
     SUMMARY_PATH.write_text("\n".join(lines), encoding="utf-8")

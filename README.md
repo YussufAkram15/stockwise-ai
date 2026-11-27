@@ -369,7 +369,7 @@ stockwise-ai/
 ├── data/
 │   ├── raw/                  ← you put the Kaggle CSV files here (not in Git)
 │   └── processed/            ← created by the scripts (not in Git)
-├── docs/                     ← project documents: version_1 (31 Oct) and version_2 (PDFs + infographic)
+├── docs/                     ← project documents: version_1 (31 Oct), version_2 (21 Nov) and final (27 Nov: PDFs + infographic)
 ├── models/                   ← saved trained models, created by train_models.py (not in Git)
 ├── notebooks/
 │   └── 02_naive_baseline_yussuf.ipynb
@@ -617,31 +617,33 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 
 | Member | Part | Model |
 |---|---|---|
-| Yussuf (team lead) | Repository, naive baseline, integration, final pipeline | Naive lag 21 |
-| Hazem | Exploratory data analysis (EDA) | Linear Regression |
+| Yussuf (team leader) | Leads the team; naive baseline; reviews the team's code (every pull request into `main`); integration of the final pipeline and test score; Level 2 (with Hazem) and Level 3 dashboard; Level 4 AWS deployment (with Adham); project documentation | Naive lag 21 |
+| Hazem | Exploratory data analysis (EDA); Level 2 (with Yussuf) | Linear Regression |
 | Zenab | Data cleaning, README | Polynomial Regression |
-| Adham | Feature engineering | Random Forest |
+| Adham | Feature engineering; Level 4 deployment (Docker health check, with Yussuf) | Random Forest |
 | Sara | Split, scores, MLflow, model comparison, error analysis | XGBoost |
 
-**Status (21 November 2026):**
+**Status (27 November 2026): the project is finished.** The final presentation is on 4 December 2026.
 
 | Step | Owner | Status |
 |---|---|---|
 | Inspection, cleaning, validation | Zenab | ✅ Done |
-| EDA charts and notes | Hazem | ✅ A version is in the repository (`src/eda.py`); Hazem's own version is not yet |
+| EDA charts and notes | Hazem | ✅ Done — `src/eda.py`, 9 charts and notes in `reports/eda/` |
 | Naive baseline | Yussuf | ✅ Done, logged in MLflow as `naive_lag21` |
 | Suspected data errors (`qc_sales_suspect`, `sales_capped`) | Zenab | ✅ Done |
 | Feature engineering | Adham, Zenab | ✅ Done (lags 16/21/28, rolling 7/28 shifted by 16, holiday distance) |
-| Leakage check | Zenab | ✅ Done — `src/leakage_check.py` |
+| Leakage check | Adham, Zenab | ✅ Done — `src/leakage_check.py` |
 | Split dates | Sara | ✅ Done — agreed train / validation / test dates in `src/config.py`, used by every script |
 | Scores (MAE / RMSE / WAPE) and MLflow logging | Sara, Zenab | ✅ Done — every model logs `val_mae`, `val_rmse`, `val_wape` to the `stockwise-ai` experiment |
 | Linear, Random Forest, XGBoost | Hazem, Adham, Sara | ✅ Done — `src/train_models.py` (XGBoost early stopping on training data only) |
 | Polynomial Regression | Zenab | ✅ Done — `src/train_polynomial.py` |
 | Model comparison and error analysis | Sara, Zenab | ✅ Done — `src/final_comparison.py`, `src/residual_analysis.py` |
 | Final test score of the best model | Yussuf | ✅ Done — Random Forest, test WAPE 15.87% (baseline 19.85%), `src/test_best_model.py` |
-| Level 2 — reorder advice | Yussuf | ✅ Done — `src/forecast_best_model.py`, `src/inventory.py` (stock simulated) |
+| Level 2 — reorder advice | Yussuf, Hazem | ✅ Done — `src/forecast_best_model.py`, `src/inventory.py` (stock simulated) |
 | Level 3 — dashboard | Yussuf | ✅ Done — `app/dashboard.py` |
 | Level 4 — deployment (Docker on AWS EC2) | Yussuf, Adham | ✅ Done — tested on EC2 (Frankfurt) on 2026-11-27, see section 15 |
+| Code review of every pull request | Yussuf | ✅ Done — every pull request into the protected `main` (13 by 27 Nov) |
+| Documentation (final, version 3.0) and infographic | Yussuf (all contribute) | ✅ Done — `docs/final/` |
 
 ---
 
@@ -658,6 +660,7 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 - Sudden one-day jumps (e.g. a cleaning-products order 10× the usual) cannot be predicted from past sales; they cause the biggest single errors.
 - Holidays are harder than normal days (WAPE 19.9% vs 12.7%).
 - The model alone predicts sales for series that stopped selling (it never saw them in training); Level 2 fixes this with the zero rule (section 4.8). Retraining with those rows kept would fix it inside the model.
+- Rare sellers (sold on only a few days a month, e.g. store 4 BOOKS: 3 units in 60 days, forecast about 1 a day) are still over-predicted by the model, for the same reason. In July, the 64 series that sold on 7 or fewer of the previous 28 days sold 392 units and were predicted 1,986. Their volume is tiny, so the error barely changes (WAPE 12.35% → 12.34% if they used their 28-day average instead) and their reorder advice stays small. The real fix is the same: retrain with the never-sold rows kept.
 
 ---
 
