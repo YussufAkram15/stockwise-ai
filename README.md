@@ -293,9 +293,9 @@ Output: `reports/reorder_table.csv` (one row per store × family) and `reports/i
 A Streamlit web page that only **reads** the files above (no training, no raw data):
 
 - **Overview** — how many series need REORDER / OK / OVERSTOCK, the 10 most urgent items, the total forecast per day.
-- **Forecast** — pick a store and a family: the last 60 days of real sales, then the 16-day forecast, and its stock advice.
+- **Forecast** — pick a store and a family: the last 60 days of real sales, then the 16-day forecast with a shaded band (± the usual daily error, sigma), and its stock advice. Hover the (?) next to each number for a one-line explanation.
 - **Reorder table** — filter by status, store, family and "runs out before", download as CSV. Answers questions like *"which stores must order BEVERAGES now?"* (status REORDER) or *"which stores may run out of BEVERAGES next week if nothing is ordered?"* (status REORDER + OK, runs out before 2017-08-23).
-- **Model accuracy** — the comparison table of all models against the baseline, and real vs predicted in July for any series.
+- **Model accuracy** — the final test score (Random Forest 15.87% vs baseline 19.85% on 16 unseen days), the comparison table of all models against the baseline, and real vs predicted in July for any series.
 
 ---
 
@@ -405,7 +405,7 @@ stockwise-ai/
 │   └── inventory.py          ← Level 2: reorder advice per store × family
 ├── app/
 │   └── dashboard.py          ← Level 3: the dashboard (streamlit run app/dashboard.py)
-├── deploy/                   ← Level 4: Dockerfile, AWS boot script, copy of the dashboard's 5 result files
+├── deploy/                   ← Level 4: Dockerfile, AWS boot script, copy of the dashboard's 6 result files
 ├── requirements.txt          ← exact library versions
 └── README.md
 ```
@@ -592,7 +592,7 @@ Open the link it prints (usually <http://127.0.0.1:5000>). `mlflow.db` is create
 | Level 2 | `reports/forecast_16d.parquet`, `reports/recent_sales.parquet`, `reports/val_predictions.parquet` | 16-day forecast, last 60 real days, July predictions (`forecast_best_model.py`; parquet not in Git) |
 | Level 2 | `reports/reorder_table.csv`, `reports/inventory_summary.md` | Reorder advice per store × family (`inventory.py`) |
 | Level 3 | `app/dashboard.py` | The dashboard, reads the files above |
-| Level 4 | `deploy/data/` | Copy of the 5 files the dashboard reads, for the Docker image (`deploy/refresh_data.sh`) |
+| Level 4 | `deploy/data/` | Copy of the 6 files the dashboard reads, for the Docker image (`deploy/refresh_data.sh`) |
 
 Generated data and models are **not** committed: anyone can re-create them by running the steps above.
 
@@ -639,8 +639,8 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 | Model comparison and error analysis | Sara, Zenab | ✅ Done — `src/final_comparison.py`, `src/residual_analysis.py` |
 | Final test score of the best model | Yussuf | ✅ Done — Random Forest, test WAPE 15.87% (baseline 19.85%), `src/test_best_model.py` |
 | Level 2 — reorder advice | Yussuf | ✅ Done — `src/forecast_best_model.py`, `src/inventory.py` (stock simulated) |
-| Level 3 — dashboard (without the AI assistant) | Yussuf | ✅ Done — `app/dashboard.py` |
-| Level 4 — deployment (Docker on AWS EC2) | Yussuf, Adham | 🔄 Files ready in `deploy/`, see section 15 |
+| Level 3 — dashboard | Yussuf | ✅ Done — `app/dashboard.py` |
+| Level 4 — deployment (Docker on AWS EC2) | Yussuf, Adham | ✅ Done — tested on EC2 (Frankfurt) on 2026-11-27, see section 15 |
 
 ---
 
@@ -649,7 +649,6 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 **Still to do:**
 
 - The best model is trained on data up to 2017-06-30; for the real 16-day forecast it could be retrained on all data up to 2017-08-15.
-- Level 3 — the AI assistant (a ready-made LLM that answers questions by reading our output tables).
 - Level 4 for production: push the image to Amazon ECR and run it on ECS Fargate (HTTPS, no server to manage).
 
 **Limitations:**
@@ -680,12 +679,12 @@ Generated data and models are **not** committed: anyone can re-create them by ru
 
 ## 15. Deploy on AWS (Level 4)
 
-**What goes online:** only the dashboard. The model runs offline on our laptops (batch). The dashboard reads 5 result files (1.4 MB), so the server needs no model, no raw data and no training libraries.
+**What goes online:** only the dashboard. The model runs offline on our laptops (batch). The dashboard reads 6 result files (1.4 MB), so the server needs no model, no raw data and no training libraries.
 
 **How it works:**
 
-1. `deploy/data/` holds a copy of the 5 files the dashboard reads (`reports/*.parquet` is not in Git, so the server could not get them otherwise).
-2. `deploy/Dockerfile` builds a small image: Python 3.12 + Streamlit + the dashboard + those 5 files.
+1. `deploy/data/` holds a copy of the 6 files the dashboard reads (`reports/*.parquet` is not in Git, so the server could not get them otherwise).
+2. `deploy/Dockerfile` builds a small image: Python 3.12 + Streamlit + the dashboard + those 6 files.
 3. `deploy/ec2-user-data.sh` runs by itself when an EC2 server starts: it installs Docker and Git, clones this repository (`main`), builds the image and starts it on port 8501.
 4. A **security group** opens only port 8501 to the internet.
 
